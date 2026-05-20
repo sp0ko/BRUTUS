@@ -34,6 +34,7 @@
 | 🧪 **Test mode** | `--test` generates a simulated attack and fires alerts to your real webhooks |
 | 🔫 **Password spray** | Detects credential-stuffing (one IP → many different usernames) |
 | 🚫 **IP blocker** | Automatically adds iptables DROP rules for detected attackers (requires root) |
+| 🕵️ **Threat intel** | Checks every attacker against offline blocklists (Spamhaus, Firehol, CINS Army…) — no API key |
 
 ---
 
@@ -114,6 +115,7 @@ python main.py [options]
   --test                Simulate an attack — tests webhooks end-to-end
   --stats               Show active IPs and exit
   --blocked             Show blocked IPs report and exit
+  --update-threat-db    Download/update IP reputation DB and exit
   --geoip-db PATH       Path to GeoLite2-City.mmdb for offline geolocation
   --version             Show version
 ```
@@ -135,6 +137,9 @@ python main.py --geoip-db /opt/GeoLite2-City.mmdb
 
 # Show blocked IP report
 python main.py --blocked
+
+# Download/refresh IP reputation database (run once, then daily via cron)
+python main.py --update-threat-db
 ```
 
 ---
@@ -175,6 +180,46 @@ python main.py --blocked
 ```
 
 IPv6 addresses are handled via `ip6tables` automatically.
+
+---
+
+## Threat intelligence (offline IP reputation)
+
+BRUTUS checks every detected attacker against free public blocklists stored **locally** — no API key, no account, no data leaving your server.
+
+| Source | What it covers |
+|---|---|
+| **Spamhaus DROP** | Hijacked / rogue networks |
+| **Spamhaus EDROP** | Extended DROP (delegated ranges) |
+| **Firehol Level 1** | Aggregated from ~30 verified sources |
+| **CINS Army** | Active botnets tracked by Shadowserver |
+| **Emerging Threats** | IPs actively attacking infrastructure |
+
+### Setup
+
+```bash
+# Step 1 — download the DB (one-time, ~50 k entries, takes ~10 s)
+python main.py --update-threat-db
+
+# Step 2 — enable in config.yaml
+#   threat_intel:
+#     enabled: true
+```
+
+```yaml
+threat_intel:
+  enabled: true
+  db_path: reports/threat_intel.txt
+  auto_update: false        # true = refresh automatically every update_interval
+  update_interval: 86400   # 24 hours
+```
+
+When a match is found, the alert is tagged `⚠ THREAT INTEL: <source>` in the console and the `threat_intel` field is included in the JSON report. Works alongside the iptables blocker — known bad IPs get blocked and flagged.
+
+**Cron example** (daily refresh at 03:00):
+```
+0 3 * * * cd /opt/brutus && python main.py --update-threat-db >> logs/ti-update.log 2>&1
+```
 
 ---
 
