@@ -29,8 +29,8 @@ htmlcov/
 reports/*.jsonl
 logs/
 
-# WAŻNE: nie commituj pliku z kluczami/webhooks jeśli uzupełniłeś go danymi
-# config.yaml  ← odkomentuj tę linię jeśli masz tam wpisane tokeny
+# WAŻNE: config.yaml może zawierać webhooks/tokeny — nie trafia na GitHub
+config.yaml
 
 # Systemy operacyjne
 .DS_Store
