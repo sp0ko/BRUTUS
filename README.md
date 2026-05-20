@@ -31,6 +31,8 @@
 | ✅ **IP whitelist** | Your home network / VPN / CI won't trigger false alarms |
 | 🔕 **Cooldown** | Same IP won't flood you with 500 notifications — one alert per X minutes |
 | 🧪 **Test mode** | `--test` generates a simulated attack and fires alerts to your real webhooks |
+| 🔫 **Password spray** | Detects credential-stuffing (one IP → many different usernames) |
+| 🚫 **IP blocker** | Automatically adds iptables DROP rules for detected attackers (requires root) |
 
 ---
 
@@ -110,6 +112,8 @@ python main.py [options]
   --slack-url URL       Slack webhook (overrides config file)
   --test                Simulate an attack — tests webhooks end-to-end
   --stats               Show active IPs and exit
+  --blocked             Show blocked IPs report and exit
+  --geoip-db PATH       Path to GeoLite2-City.mmdb for offline geolocation
   --version             Show version
 ```
 
@@ -124,7 +128,52 @@ python main.py --discord-url "https://discord.com/api/webhooks/..."
 
 # Monitor a specific file
 python main.py --log /var/log/secure --type linux_ssh
+
+# Use offline GeoLite2 database (no internet needed for geolocation)
+python main.py --geoip-db /opt/GeoLite2-City.mmdb
+
+# Show blocked IP report
+python main.py --blocked
 ```
+
+---
+
+## Password spray detection
+
+BRUTUS tracks not only the number of failed attempts per IP, but also the **number of unique usernames** tried. When one IP tries more than `spray_username_threshold` different usernames it is classified as a **PASSWORD_SPRAY** attack.
+
+Configure in `config.yaml`:
+
+```yaml
+detection:
+  spray_username_threshold: 8   # unique usernames before spray alert
+```
+
+---
+
+## Active IP blocking (iptables)
+
+When `blocker.enabled: true`, BRUTUS automatically adds **iptables DROP rules** for every detected attacker. Works on Linux with `CAP_NET_ADMIN` (typically run as root or via `sudo`).
+
+> **Warning**: This modifies live iptables rules. All rules are removed on clean shutdown via `unblock_all()`. Test with `dry_run: true` first.
+
+```yaml
+blocker:
+  enabled: false          # set true to activate (requires root)
+  auto_unblock_after: 3600  # seconds before automatic unblock; 0 = permanent
+  state_file: reports/blocked_ips.json
+  dry_run: false          # set true to log without touching iptables
+```
+
+```bash
+# Run with blocking enabled (requires root)
+sudo python main.py
+
+# View blocked IPs
+python main.py --blocked
+```
+
+IPv6 addresses are handled via `ip6tables` automatically.
 
 ---
 

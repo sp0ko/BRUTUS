@@ -40,7 +40,7 @@ from utils.geo import GeoLocator
 from utils.blocker import IPBlocker
 from utils.ip_utils import parse_cidr_list
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "config.yaml")
 
 BANNER = r"""

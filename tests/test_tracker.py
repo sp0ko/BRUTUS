@@ -184,6 +184,71 @@ class TestBruteForceTracker(unittest.TestCase):
         self.assertIsNotNone(alert)
         self.assertIn("RDP", alert.attack_type)
 
+    # ------------------------------------------------------------------
+    # Password spray detection
+    # ------------------------------------------------------------------
+
+    def _make_spray_tracker(self, spray_threshold=4, brute_threshold=20):
+        return BruteForceTracker(
+            threshold=brute_threshold,
+            time_window=60,
+            alert_cooldown=0,
+            spray_username_threshold=spray_threshold,
+        )
+
+    def test_spray_alert_triggered_on_unique_usernames(self):
+        """Alert PASSWORD_SPRAY when unique usernames >= spray_username_threshold."""
+        tracker = self._make_spray_tracker(spray_threshold=4)
+        alert = None
+        for u in ["alice", "bob", "charlie", "dave"]:
+            alert = tracker.record_failed(ip="20.20.20.20", username=u)
+        self.assertIsNotNone(alert, "Spray alert should fire at threshold unique usernames")
+        self.assertEqual(alert.attack_type, "PASSWORD_SPRAY")
+
+    def test_spray_alert_not_triggered_below_threshold(self):
+        """No spray alert when unique usernames < spray_username_threshold."""
+        tracker = self._make_spray_tracker(spray_threshold=5)
+        alert = None
+        for u in ["alice", "bob", "charlie"]:
+            alert = tracker.record_failed(ip="20.20.20.21", username=u)
+        self.assertIsNone(alert, "No alert below unique-username threshold")
+
+    def test_spray_alert_includes_all_tried_usernames(self):
+        """Alert event should list all unique usernames tried."""
+        tracker = self._make_spray_tracker(spray_threshold=3)
+        users = ["root", "admin", "operator"]
+        alert = None
+        for u in users:
+            alert = tracker.record_failed(ip="20.20.20.22", username=u)
+        self.assertIsNotNone(alert)
+        for u in users:
+            self.assertIn(u, alert.usernames)
+
+    def test_spray_alert_ip_correct(self):
+        tracker = self._make_spray_tracker(spray_threshold=3)
+        alert = None
+        for u in ["x", "y", "z"]:
+            alert = tracker.record_failed(ip="30.30.30.30", username=u)
+        self.assertIsNotNone(alert)
+        self.assertEqual(alert.ip, "30.30.30.30")
+
+    def test_spray_repeated_username_does_not_inflate_unique_count(self):
+        """Same username repeated many times does not trigger spray alert."""
+        tracker = self._make_spray_tracker(spray_threshold=4, brute_threshold=20)
+        alert = None
+        for _ in range(10):
+            alert = tracker.record_failed(ip="40.40.40.40", username="root")
+        self.assertIsNone(alert, "Repeated same username should not trigger spray")
+
+    def test_spray_and_brute_independent_ips(self):
+        """Spray from one IP does not affect brute-force counter for another IP."""
+        tracker = self._make_spray_tracker(spray_threshold=3, brute_threshold=5)
+        for u in ["a", "b", "c"]:
+            tracker.record_failed(ip="50.50.50.50", username=u)
+        # Different IP with few attempts — no alert
+        alert = tracker.record_failed(ip="60.60.60.60", username="root")
+        self.assertIsNone(alert)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
