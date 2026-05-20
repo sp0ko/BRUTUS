@@ -33,6 +33,7 @@ geo:
   enabled: true
   cache_ttl: 3600
   timeout: 5
+  # mmdb_path: /path/to/GeoLite2-City.mmdb   # offline mode (requires: pip install geoip2)
 
 whitelist:
   - "127.0.0.1"

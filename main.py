@@ -114,6 +114,8 @@ def merge_cli_overrides(cfg: dict, args: argparse.Namespace) -> dict:
         cfg.setdefault("discord", {}).update({"webhook_url": args.discord_url, "enabled": True})
     if args.slack_url:
         cfg.setdefault("slack", {}).update({"webhook_url": args.slack_url, "enabled": True})
+    if getattr(args, "geoip_db", None):
+        cfg.setdefault("geo", {})["mmdb_path"] = args.geoip_db
     return cfg
 
 
@@ -223,6 +225,7 @@ def build_arg_parser(T: dict) -> argparse.ArgumentParser:
     p.add_argument("--test",        action="store_true",    help=T["help_test"])
     p.add_argument("--stats",       action="store_true",    help=T["help_stats"])
     p.add_argument("--lang",        choices=["pl", "en"],   help=T["help_lang"])
+    p.add_argument("--geoip-db",    metavar="FILE",          help=T["help_geoip_db"])
     p.add_argument("--version",     action="version",       version=f"BRUTU$ {VERSION}")
     return p
 
@@ -267,6 +270,7 @@ def main() -> int:
         enabled=geo_cfg.get("enabled", True),
         cache_ttl=geo_cfg.get("cache_ttl", 3600),
         timeout=geo_cfg.get("timeout", 5),
+        mmdb_path=geo_cfg.get("mmdb_path"),
     )
 
     console_alert = ConsoleAlert()
