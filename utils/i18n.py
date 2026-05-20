@@ -130,6 +130,10 @@ STRINGS: dict = {
         "ti_updated":         "Threat intel zaktualizowany: %d wpisów → %s",
         "ti_match":           "THREAT INTEL: %s",
         "help_update_ti":     "Pobierz/zaktualizuj bazę reputacji IP i zakończ",
+        # ── syslog server ─────────────────────────────────────────────────
+        "syslog_started":     "Serwer syslog: nasłuchuje na %s:%d/%s",
+        "syslog_disabled":    "Serwer syslog: wyłączony",
+        "syslog_bind_err":    "Serwer syslog: błąd bind %s:%d — %s",
     },
     "en": {
         # ── main.py ──────────────────────────────────────────────────────────
@@ -248,6 +252,10 @@ STRINGS: dict = {
         "ti_updated":         "Threat intel updated: %d entries → %s",
         "ti_match":           "THREAT INTEL: %s",
         "help_update_ti":     "Download/update IP reputation DB and exit",
+        # ── syslog server ─────────────────────────────────────────────────
+        "syslog_started":     "Syslog server: listening on %s:%d/%s",
+        "syslog_disabled":    "Syslog server: disabled",
+        "syslog_bind_err":    "Syslog server: bind error %s:%d — %s",
     },
 }
 

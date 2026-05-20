@@ -413,13 +413,24 @@ def main() -> int:
     monitor.add_alert_handler(dispatcher.dispatch)
 
     log_files = [f for f in cfg.get("log_files", []) if f.get("enabled", True)]
-    if not log_files:
+    sl_cfg = cfg.get("syslog", {})
+    if not log_files and not sl_cfg.get("enabled"):
         logger.error(T["no_log_files"])
         return 1
 
     for lf in log_files:
         logger.info(T["adding_file"], lf["path"], lf["type"])
         monitor.add_log_file(path=lf["path"], parser_type=lf["type"])
+
+    if sl_cfg.get("enabled"):
+        monitor.add_syslog_source(
+            host=sl_cfg.get("host", "0.0.0.0"),
+            port=sl_cfg.get("port", 5514),
+            protocol=sl_cfg.get("protocol", "udp"),
+            parser_type=sl_cfg.get("parser", "linux_ssh"),
+        )
+    else:
+        logger.info(T["syslog_disabled"])
 
     monitor.start()
 

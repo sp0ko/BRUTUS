@@ -29,6 +29,7 @@
 |---|---|
 | 🐧 **Linux SSH** | `/var/log/auth.log`, `/var/log/secure` — regex on syslog format |
 | 🪟 **Windows RDP** | `.evtx` files, Event ID 4625 / 4624, or live Windows Event Log |
+| 📡 **Central syslog** | Receives auth logs from remote machines over UDP/TCP — no agent needed |
 | ⚡ **Real-time tail** | Reacts in a fraction of a second, just like `tail -f` |
 
 ### 🛡️ Active defense
@@ -203,6 +204,32 @@ python main.py --blocked
 ```
 
 IPv6 addresses are handled via `ip6tables` automatically.
+
+---
+
+## Central syslog server
+
+BRUTUS can act as a **central syslog collector** — remote servers forward their auth logs to it over UDP or TCP. No agent, no extra software on the remote machines; just one rsyslog line.
+
+```yaml
+syslog:
+  enabled: true
+  host: "0.0.0.0"   # or a specific interface IP
+  port: 5514         # 514 requires root / CAP_NET_BIND_SERVICE
+  protocol: udp      # udp | tcp
+  parser: linux_ssh
+```
+
+**On each remote machine** (rsyslog):
+```
+# /etc/rsyslog.d/99-brutus.conf
+*.auth    @brutus-server-ip:5514      # UDP
+# *.auth  @@brutus-server-ip:5514    # TCP (two @@ signs)
+```
+
+Then restart rsyslog: `sudo systemctl restart rsyslog`
+
+> The attacker IP is read from inside the syslog message body (logged by sshd), not from the UDP source address — so geolocation, threat intel, and iptables blocking all work exactly the same as with local log files.
 
 ---
 

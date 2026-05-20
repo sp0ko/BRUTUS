@@ -30,6 +30,23 @@ slack:
   enabled: false
   webhook_url: ""   # https://hooks.slack.com/services/T.../B.../...
 
+# ── Central Syslog receiver ───────────────────────────────────────────────────
+# Collects auth logs from remote machines (SSH, xRDP) over the network.
+# Remote servers forward via rsyslog / syslog-ng — no agent needed.
+#
+# rsyslog snippet (on each remote machine):
+#   *.auth    @brutus-server:5514      # UDP (one @)
+#   *.auth    @@brutus-server:5514     # TCP (two @@)
+#
+# Note: port 514 requires root or CAP_NET_BIND_SERVICE.
+#       Port 5514 works without root privileges.
+syslog:
+  enabled: false
+  host: "0.0.0.0"      # bind address; use "127.0.0.1" for local-only
+  port: 5514
+  protocol: udp          # udp | tcp
+  parser: linux_ssh      # parser for incoming messages
+
 geo:
   enabled: true
   cache_ttl: 3600
