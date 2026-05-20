@@ -2,17 +2,19 @@
 """
 BRUTU$ v1.0.0
 =============
-Detektor ataków SSH/RDP w czasie rzeczywistym.
+Real-time SSH/RDP brute-force attack detector.
 
-Przykłady
----------
-  python main.py                         # domyślny config.yaml
+Examples
+--------
+  python main.py                         # default config.yaml
   python main.py --config custom.yaml
   python main.py --threshold 3 --window 30
   python main.py --log /var/log/auth.log --type linux_ssh
   python main.py --discord-url "https://discord.com/api/webhooks/..."
-  python main.py --test                  # symulacja ataku
-  python main.py --stats                 # pokaż statystyki i zakończ
+  python main.py --test                  # simulate attack
+  python main.py --stats                 # show statistics and exit
+  python main.py --lang pl               # force Polish language
+  python main.py --lang en               # force English language
 """
 
 import argparse
@@ -48,6 +50,109 @@ BANNER = r"""
 
   SSH & RDP Brute-Force Detector  •  Discord  •  Slack  •  GeoIP
 """.format(version=VERSION)
+
+# ── Translations ──────────────────────────────────────────────────────────────
+
+STRINGS: dict = {
+    "pl": {
+        "description":  "BRUTU$ — detekcja ataków SSH/RDP w czasie rzeczywistym",
+        "help_config":   "Ścieżka do pliku config.yaml",
+        "help_log":      "Dodatkowy plik logu",
+        "help_type":     "Typ parsera: linux_ssh | windows_evtx",
+        "help_threshold":"Próg nieudanych logowań",
+        "help_window":   "Okno czasu (sekundy)",
+        "help_cooldown": "Cooldown alertów (sekundy)",
+        "help_discord":  "Discord webhook URL",
+        "help_slack":    "Slack webhook URL",
+        "help_test":     "Tryb testowy — symulacja ataku",
+        "help_stats":    "Pokaż statystyki i zakończ",
+        "help_lang":     "Język interfejsu: pl | en (pomija interaktywny wybór)",
+        "err_config":    "[BŁĄD] Plik konfiguracyjny nie istnieje: %s",
+        "tracker_info":  "Tracker: próg=%d  okno=%ds  cooldown=%ds",
+        "discord_on":    "Discord webhook: aktywny ✓",
+        "discord_off":   "Discord: wyłączony",
+        "slack_on":      "Slack webhook: aktywny ✓",
+        "slack_off":     "Slack: wyłączony",
+        "reports_info":  "Raporty: %s",
+        "no_log_files":  "Brak aktywnych plików logów! Dodaj wpisy w 'log_files' w config.yaml.",
+        "adding_file":   "Dodaję plik: %s  (parser: %s)",
+        "signal_stop":   "Sygnał %s — zatrzymuję…",
+        "started":       "BRUTU$ uruchomiony — Ctrl+C aby zatrzymać.",
+        "active_ips":    "Aktywne IP: %d  |  Najbardziej aktywne: %s (%d prób)",
+        "stopped":       "BRUTU$ zatrzymany.",
+        "test_start":    "\n[TEST] Uruchamiam symulację ataku brute-force…\n",
+        "test_end":      "\n[TEST] Symulacja zakończona. Sprawdź Discord/Slack jeśli webhooks są skonfigurowane.",
+        "no_activity":   "Brak aktywności w bieżącym oknie czasu.",
+        "col_ip":        "IP",
+        "col_attempts":  "Próby",
+        "col_type":      "Typ ataku",
+        "col_users":     "Użytkownicy",
+    },
+    "en": {
+        "description":  "BRUTU$ — real-time SSH/RDP brute-force attack detector",
+        "help_config":   "Path to config.yaml file",
+        "help_log":      "Additional log file path",
+        "help_type":     "Parser type: linux_ssh | windows_evtx",
+        "help_threshold":"Failed login threshold",
+        "help_window":   "Time window (seconds)",
+        "help_cooldown": "Alert cooldown (seconds)",
+        "help_discord":  "Discord webhook URL",
+        "help_slack":    "Slack webhook URL",
+        "help_test":     "Test mode — simulate attack",
+        "help_stats":    "Show statistics and exit",
+        "help_lang":     "Interface language: pl | en (skips interactive prompt)",
+        "err_config":    "[ERROR] Config file not found: %s",
+        "tracker_info":  "Tracker: threshold=%d  window=%ds  cooldown=%ds",
+        "discord_on":    "Discord webhook: active ✓",
+        "discord_off":   "Discord: disabled",
+        "slack_on":      "Slack webhook: active ✓",
+        "slack_off":     "Slack: disabled",
+        "reports_info":  "Reports: %s",
+        "no_log_files":  "No active log files! Add entries under 'log_files' in config.yaml.",
+        "adding_file":   "Adding file: %s  (parser: %s)",
+        "signal_stop":   "Signal %s — stopping…",
+        "started":       "BRUTU$ running — press Ctrl+C to stop.",
+        "active_ips":    "Active IPs: %d  |  Most active: %s (%d attempts)",
+        "stopped":       "BRUTU$ stopped.",
+        "test_start":    "\n[TEST] Starting brute-force attack simulation…\n",
+        "test_end":      "\n[TEST] Simulation complete. Check Discord/Slack if webhooks are configured.",
+        "no_activity":   "No activity in the current time window.",
+        "col_ip":        "IP",
+        "col_attempts":  "Attempts",
+        "col_type":      "Attack type",
+        "col_users":     "Usernames",
+    },
+}
+
+
+def _detect_lang_flag() -> Optional[str]:
+    """Scan sys.argv for --lang without running the full argparser."""
+    argv = sys.argv[1:]
+    for i, arg in enumerate(argv):
+        if arg.startswith("--lang="):
+            val = arg.split("=", 1)[1]
+            if val in ("pl", "en"):
+                return val
+        elif arg == "--lang" and i + 1 < len(argv):
+            val = argv[i + 1]
+            if val in ("pl", "en"):
+                return val
+    return None
+
+
+def select_language() -> str:
+    """Prompt the user to choose a language and return 'pl' or 'en'."""
+    prompt = "  Wybierz język / Choose language:\n  [1] Polski  [2] English  (default: 2)\n  > "
+    while True:
+        try:
+            choice = input(prompt).strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return "en"
+        if choice == "1":
+            return "pl"
+        if choice in ("2", ""):
+            return "en"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -125,8 +230,8 @@ class AlertDispatcher:
 
 # ──────────────────────────────────────────────────────────────────────────────
 
-def run_test_mode(dispatcher: AlertDispatcher, tracker: BruteForceTracker) -> None:
-    print("\n[TEST] Uruchamiam symulację ataku brute-force…\n")
+def run_test_mode(dispatcher: AlertDispatcher, tracker: BruteForceTracker, T: dict) -> None:
+    print(T["test_start"])
 
     scenarios = [
         {"ip": "203.0.113.42",  "users": ["root", "admin", "Administrator"], "type": "SSH",  "src": "/var/log/auth.log (test)",  "count": 8},
@@ -156,19 +261,22 @@ def run_test_mode(dispatcher: AlertDispatcher, tracker: BruteForceTracker) -> No
 
         time.sleep(0.5)
 
-    print("\n[TEST] Symulacja zakończona. Sprawdź Discord/Slack jeśli webhooks są skonfigurowane.")
+    print(T["test_end"])
 
 
-def print_stats(tracker: BruteForceTracker) -> None:
+def print_stats(tracker: BruteForceTracker, T: dict) -> None:
     stats = tracker.get_stats()
     if not stats:
-        print("Brak aktywności w bieżącym oknie czasu.")
+        print(T["no_activity"])
         return
-    print(f"\n{'IP':<20} {'Próby':>6}  {'Typ ataku':<15}  Użytkownicy")
+    col_attempts = T["col_attempts"]
+    col_type     = T["col_type"]
+    col_users    = T["col_users"]
+    print(f"\n{T['col_ip']:<20} {col_attempts:>8}  {col_type:<15}  {col_users}")
     print("-" * 70)
     for ip, info in sorted(stats.items(), key=lambda x: -x[1]["count"]):
         print(
-            f"{ip:<20} {info['count']:>6}  "
+            f"{ip:<20} {info['count']:>8}  "
             f"{', '.join(info['attack_types']):<15}  "
             f"{', '.join(info['usernames'][:5]) or '—'}"
         )
@@ -177,22 +285,23 @@ def print_stats(tracker: BruteForceTracker) -> None:
 
 # ──────────────────────────────────────────────────────────────────────────────
 
-def build_arg_parser() -> argparse.ArgumentParser:
+def build_arg_parser(T: dict) -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        description="BRUTU$ — detekcja ataków SSH/RDP w czasie rzeczywistym",
+        description=T["description"],
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    p.add_argument("--config",      default=DEFAULT_CONFIG, help="Ścieżka do pliku config.yaml")
-    p.add_argument("--log",         metavar="PATH",         help="Dodatkowy plik logu")
-    p.add_argument("--type",        metavar="TYPE",         help="Typ parsera: linux_ssh | windows_evtx")
-    p.add_argument("--threshold",   type=int,               help="Próg nieudanych logowań")
-    p.add_argument("--window",      type=int,               help="Okno czasu (sekundy)")
-    p.add_argument("--cooldown",    type=int,               help="Cooldown alertów (sekundy)")
-    p.add_argument("--discord-url", metavar="URL",          help="Discord webhook URL")
-    p.add_argument("--slack-url",   metavar="URL",          help="Slack webhook URL")
-    p.add_argument("--test",        action="store_true",    help="Tryb testowy — symulacja ataku")
-    p.add_argument("--stats",       action="store_true",    help="Pokaż statystyki i zakończ")
+    p.add_argument("--config",      default=DEFAULT_CONFIG, help=T["help_config"])
+    p.add_argument("--log",         metavar="PATH",         help=T["help_log"])
+    p.add_argument("--type",        metavar="TYPE",         help=T["help_type"])
+    p.add_argument("--threshold",   type=int,               help=T["help_threshold"])
+    p.add_argument("--window",      type=int,               help=T["help_window"])
+    p.add_argument("--cooldown",    type=int,               help=T["help_cooldown"])
+    p.add_argument("--discord-url", metavar="URL",          help=T["help_discord"])
+    p.add_argument("--slack-url",   metavar="URL",          help=T["help_slack"])
+    p.add_argument("--test",        action="store_true",    help=T["help_test"])
+    p.add_argument("--stats",       action="store_true",    help=T["help_stats"])
+    p.add_argument("--lang",        choices=["pl", "en"],   help=T["help_lang"])
     p.add_argument("--version",     action="version",       version=f"BRUTU$ {VERSION}")
     return p
 
@@ -200,10 +309,19 @@ def build_arg_parser() -> argparse.ArgumentParser:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def main() -> int:
-    args = build_arg_parser().parse_args()
+    print(BANNER)
+
+    # ── Language selection ────────────────────────────────────────────────────
+    lang = _detect_lang_flag()
+    if lang is None:
+        lang = select_language()
+    T = STRINGS[lang]
+    print()
+
+    args = build_arg_parser(T).parse_args()
 
     if not os.path.exists(args.config):
-        print(f"[BŁĄD] Plik konfiguracyjny nie istnieje: {args.config}", file=sys.stderr)
+        print(T["err_config"] % args.config, file=sys.stderr)
         return 1
 
     cfg = merge_cli_overrides(load_config(args.config), args)
@@ -212,8 +330,6 @@ def main() -> int:
     setup_logging(log_cfg.get("level", "INFO"), log_cfg.get("file"))
     logger = logging.getLogger("brute-force-detector")
 
-    print(BANNER)
-
     det_cfg = cfg.get("detection", {})
     tracker = BruteForceTracker(
         threshold=det_cfg.get("threshold", 5),
@@ -221,7 +337,7 @@ def main() -> int:
         alert_cooldown=det_cfg.get("alert_cooldown", 300),
         success_failure_threshold=det_cfg.get("success_failure_threshold", 3),
     )
-    logger.info("Tracker: próg=%d  okno=%ds  cooldown=%ds",
+    logger.info(T["tracker_info"],
                 tracker.threshold, tracker.time_window, tracker.alert_cooldown)
 
     geo_cfg = cfg.get("geo", {})
@@ -237,50 +353,50 @@ def main() -> int:
     d_cfg = cfg.get("discord", {})
     if d_cfg.get("enabled") and d_cfg.get("webhook_url"):
         discord_alert = DiscordAlert(webhook_url=d_cfg["webhook_url"])
-        logger.info("Discord webhook: aktywny ✓")
+        logger.info(T["discord_on"])
     else:
-        logger.info("Discord: wyłączony")
+        logger.info(T["discord_off"])
 
     slack_alert = None
     s_cfg = cfg.get("slack", {})
     if s_cfg.get("enabled") and s_cfg.get("webhook_url"):
         slack_alert = SlackAlert(webhook_url=s_cfg["webhook_url"])
-        logger.info("Slack webhook: aktywny ✓")
+        logger.info(T["slack_on"])
     else:
-        logger.info("Slack: wyłączony")
+        logger.info(T["slack_off"])
 
     rep_manager = None
     r_cfg = cfg.get("reports", {})
     if r_cfg.get("save_to_file", True):
         rep_manager = ReportManager(output_path=r_cfg.get("output_path", "reports/alerts.jsonl"))
-        logger.info("Raporty: %s", r_cfg.get("output_path", "reports/alerts.jsonl"))
+        logger.info(T["reports_info"], r_cfg.get("output_path", "reports/alerts.jsonl"))
 
     dispatcher = AlertDispatcher(
         console=console_alert, discord=discord_alert,
         slack=slack_alert, report_manager=rep_manager, geo=geo,
     )
 
-    # ── Tryby specjalne ───────────────────────────────────────────────────────
+    # ── Special modes ─────────────────────────────────────────────────────────
     if args.test:
-        run_test_mode(dispatcher, tracker)
+        run_test_mode(dispatcher, tracker, T)
         return 0
 
     if args.stats:
-        print_stats(tracker)
+        print_stats(tracker, T)
         return 0
 
-    # ── Monitor logów ─────────────────────────────────────────────────────────
+    # ── Log monitor ───────────────────────────────────────────────────────────
     whitelist = parse_cidr_list(cfg.get("whitelist", []))
     monitor = LogMonitor(tracker=tracker, whitelist_nets=whitelist)
     monitor.add_alert_handler(dispatcher.dispatch)
 
     log_files = [f for f in cfg.get("log_files", []) if f.get("enabled", True)]
     if not log_files:
-        logger.error("Brak aktywnych plików logów! Dodaj wpisy w 'log_files' w config.yaml.")
+        logger.error(T["no_log_files"])
         return 1
 
     for lf in log_files:
-        logger.info("Dodaję plik: %s  (parser: %s)", lf["path"], lf["type"])
+        logger.info(T["adding_file"], lf["path"], lf["type"])
         monitor.add_log_file(path=lf["path"], parser_type=lf["type"])
 
     monitor.start()
@@ -288,13 +404,13 @@ def main() -> int:
     stop_event = threading.Event()
 
     def handle_signal(sig, _frame):
-        logger.info("Sygnał %s — zatrzymuję…", sig)
+        logger.info(T["signal_stop"], sig)
         stop_event.set()
 
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
 
-    logger.info("BRUTU$ uruchomiony — Ctrl+C aby zatrzymać.")
+    logger.info(T["started"])
 
     try:
         while not stop_event.is_set():
@@ -302,11 +418,11 @@ def main() -> int:
             stats = tracker.get_stats()
             if stats:
                 top_ip = max(stats, key=lambda x: stats[x]["count"])
-                logger.info("Aktywne IP: %d  |  Najbardziej aktywne: %s (%d prób)",
+                logger.info(T["active_ips"],
                             len(stats), top_ip, stats[top_ip]["count"])
     finally:
         monitor.stop()
-        logger.info("BRUTU$ zatrzymany.")
+        logger.info(T["stopped"])
 
     return 0
 
