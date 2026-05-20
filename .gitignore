@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Testy
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logi i raporty (NIE commituj prawdziwych logów!)
+reports/*.jsonl
+logs/
+
+# WAŻNE: nie commituj pliku z kluczami/webhooks jeśli uzupełniłeś go danymi
+# config.yaml  ← odkomentuj tę linię jeśli masz tam wpisane tokeny
+
+# Systemy operacyjne
+.DS_Store
+Thumbs.db

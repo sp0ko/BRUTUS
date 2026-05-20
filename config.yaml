@@ -1,0 +1,48 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# BruteForce Detector — konfiguracja
+# ──────────────────────────────────────────────────────────────────────────────
+
+detection:
+  threshold: 5                 # liczba nieudanych logowań wyzwalająca alert
+  time_window: 60              # okno czasu (sekundy)
+  alert_cooldown: 300          # przerwa między alertami dla tego samego IP (sekundy)
+  success_failure_threshold: 3 # min. prób przed uznaniem udanego logowania za włamanie
+
+log_files:
+  - path: /var/log/auth.log    # Debian / Ubuntu
+    type: linux_ssh
+    enabled: true
+
+  # - path: /var/log/secure    # RHEL / CentOS / Fedora
+  #   type: linux_ssh
+  #   enabled: true
+
+  # - path: /sciezka/do/Security.evtx   # plik Windows Event Log
+  #   type: windows_evtx
+  #   enabled: false
+
+discord:
+  enabled: false
+  webhook_url: ""   # https://discord.com/api/webhooks/ID/TOKEN
+
+slack:
+  enabled: false
+  webhook_url: ""   # https://hooks.slack.com/services/T.../B.../...
+
+geo:
+  enabled: true
+  cache_ttl: 3600
+  timeout: 5
+
+whitelist:
+  - "127.0.0.1"
+  - "::1"
+  # - "192.168.1.0/24"
+
+reports:
+  save_to_file: true
+  output_path: reports/alerts.jsonl
+
+logging:
+  level: INFO
+  # file: logs/detector.log

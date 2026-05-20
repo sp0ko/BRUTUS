@@ -1,0 +1,9 @@
+requests>=2.31.0
+pyyaml>=6.0
+colorama>=0.4.6
+
+# Windows EVTX file parsing (cross-platform, optional)
+# python-evtx>=0.7.4
+
+# Windows live Event Log (Windows only, optional)
+# pywin32>=306
