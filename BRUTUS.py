@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-BRUTU$ v1.0.0
+BRUTU$ v1.3.0
 =============
 Real-time SSH/RDP brute-force attack detector.
 
@@ -41,7 +41,7 @@ from utils.blocker import IPBlocker
 from utils.ip_utils import parse_cidr_list
 from utils.threat_intel import ThreatIntel
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "config.yaml")
 
 BANNER = r"""

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-BRUTU$ v1.0.0
+BRUTU$ v1.3.0
 =============
 Real-time SSH/RDP brute-force attack detector.
 
