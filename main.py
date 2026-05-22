@@ -41,7 +41,7 @@ from utils.blocker import IPBlocker
 from utils.ip_utils import parse_cidr_list
 from utils.threat_intel import ThreatIntel
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "config.yaml")
 
 BANNER = r"""
@@ -136,6 +136,7 @@ class AlertDispatcher:
         blocker: Optional[IPBlocker] = None,
         whitelist_nets: Optional[list] = None,
         threat_intel: Optional[ThreatIntel] = None,
+        ti_action: str = "block",
     ) -> None:
         self.console = console
         self.discord = discord
@@ -145,6 +146,7 @@ class AlertDispatcher:
         self.blocker = blocker
         self.whitelist_nets = whitelist_nets or []
         self.threat_intel = threat_intel
+        self.ti_action = ti_action  # "block" | "alert_only"
 
     def dispatch(self, event: AlertEvent) -> None:
         from utils.ip_utils import ip_in_list
@@ -152,10 +154,12 @@ class AlertDispatcher:
         event.geo_info = geo_info
 
         # Threat intel enrichment — check before sending alerts
+        ti_matched = False
         if self.threat_intel:
             match = self.threat_intel.is_known_bad(event.ip)
             if match:
                 event.threat_intel = match
+                ti_matched = True
                 log.warning("THREAT INTEL MATCH: %s ← %s", event.ip, match)
 
         self.console.send(event, geo=geo_info)
@@ -168,7 +172,9 @@ class AlertDispatcher:
             threading.Thread(target=self.report_manager.save, args=(event,), kwargs={"geo": geo_info}, daemon=True).start()
 
         # Active defense — block attacker unless whitelisted
-        if self.blocker and not ip_in_list(event.ip, self.whitelist_nets):
+        # When ti_action=alert_only and IP is in threat intel, skip the block
+        skip_block = ti_matched and self.ti_action == "alert_only"
+        if self.blocker and not skip_block and not ip_in_list(event.ip, self.whitelist_nets):
             self.blocker.block(
                 ip=event.ip,
                 attempts=event.count,
@@ -366,10 +372,16 @@ def main() -> int:
     whitelist = parse_cidr_list(cfg.get("whitelist", []))
 
     ti_cfg = cfg.get("threat_intel", {})
+    # sources: config accepts either a list of URLs or a {name: url} dict
+    _raw_sources = ti_cfg.get("sources")
+    if isinstance(_raw_sources, list):
+        _ti_sources = {f"source_{i}": url for i, url in enumerate(_raw_sources)}
+    else:
+        _ti_sources = _raw_sources or None
     threat_intel = ThreatIntel(
         enabled=ti_cfg.get("enabled", False),
         db_path=ti_cfg.get("db_path", "reports/threat_intel.txt"),
-        sources=ti_cfg.get("sources") or None,
+        sources=_ti_sources,
         auto_update=ti_cfg.get("auto_update", False),
         update_interval=ti_cfg.get("update_interval", 86400),
         timeout=ti_cfg.get("timeout", 15),
@@ -387,6 +399,7 @@ def main() -> int:
         slack=slack_alert, report_manager=rep_manager, geo=geo,
         blocker=blocker, whitelist_nets=whitelist,
         threat_intel=threat_intel,
+        ti_action=det_cfg.get("action_on_threat_intel_match", "block"),
     )
 
     # ── Special modes ─────────────────────────────────────────────────────────

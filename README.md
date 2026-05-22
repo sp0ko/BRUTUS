@@ -10,8 +10,18 @@
  ██████╔╝██████╔╝██║   ██║   ██║   ██║   ██║███████╗
  ██╔══██╗██╔══██╗██║   ██║   ██║   ██║   ██║╚════██║
  ██████╔╝██║  ██║╚██████╔╝   ██║   ╚██████╔╝███████║
- ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.2.0
+ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.3.0
 ```
+
+---
+
+## What's new in v1.3.0
+
+| | |
+|---|---|
+| 🎯 **Configurable TI action** | `action_on_threat_intel_match: block \| alert_only` — decide whether a threat intel match triggers a block or just an alert |
+| 📋 **Custom source list** | `threat_intel.sources` now accepts a plain URL list in `config.yaml` — swap feeds without touching code |
+| 🔄 **6 feeds by default** | Added **blocklist.de SSH** feed alongside existing Spamhaus / Firehol / CINS / Emerging Threats |
 
 ---
 
@@ -265,6 +275,30 @@ threat_intel:
 ```
 
 When a match is found, the alert is tagged `⚠ THREAT INTEL: <source>` in the console and the `threat_intel` field is included in the JSON report. Works alongside the iptables blocker — known bad IPs get blocked and flagged.
+
+### Configurable sources & block action
+
+You can override the default source list and control what happens on a match:
+
+```yaml
+detection:
+  action_on_threat_intel_match: block  # block (default) | alert_only
+
+threat_intel:
+  enabled: true
+  sources:
+    - "https://www.spamhaus.org/drop/drop.txt"
+    - "https://www.spamhaus.org/drop/edrop.txt"
+    - "https://iplists.firehol.org/files/firehol_level1.netset"
+    - "https://lists.blocklist.de/lists/ssh.txt"
+    - "https://cinsscore.com/list/ci-badguys.txt"
+    - "https://rules.emergingthreats.net/fwrules/emerging-Block-IPs.txt"
+```
+
+| `action_on_threat_intel_match` | Behaviour |
+|---|---|
+| `block` | IP blocked via iptables + alert sent (default) |
+| `alert_only` | Alert sent, blocker skipped — useful for monitoring-only mode |
 
 **Cron example** (daily refresh at 03:00):
 ```

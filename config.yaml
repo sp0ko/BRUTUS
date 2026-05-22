@@ -8,6 +8,7 @@ detection:
   alert_cooldown: 300          # cooldown between alerts for the same IP (seconds)
   success_failure_threshold: 3 # min failures before a success counts as a breach
   spray_username_threshold: 8  # unique accounts from one IP = password spray alert
+  action_on_threat_intel_match: block  # block / alert_only — overrides blocker for TI-matched IPs
 
 log_files:
   - path: /var/log/auth.log    # Debian / Ubuntu
@@ -82,9 +83,10 @@ threat_intel:
   auto_update: false            # refresh DB automatically every update_interval
   update_interval: 86400        # seconds between auto-updates (default: 24 h)
   timeout: 15                   # HTTP request timeout per source (seconds)
-  # sources:                    # leave empty to use all 5 built-in sources
-  #   spamhaus_drop:    https://www.spamhaus.org/drop/drop.txt
-  #   spamhaus_edrop:   https://www.spamhaus.org/drop/edrop.txt
-  #   firehol_l1:       https://iplists.firehol.org/files/firehol_level1.netset
-  #   cins_army:        https://cinsscore.com/list/ci-badguys.txt
-  #   emerging_threats: https://rules.emergingthreats.net/fwrules/emerging-Block-IPs.txt
+  sources:                    # leave empty to use all 5 built-in sources; swap URLs as needed
+    - "https://www.spamhaus.org/drop/drop.txt"
+    - "https://www.spamhaus.org/drop/edrop.txt"
+    - "https://iplists.firehol.org/files/firehol_level1.netset"
+    - "https://lists.blocklist.de/lists/ssh.txt"
+    - "https://cinsscore.com/list/ci-badguys.txt"
+    - "https://rules.emergingthreats.net/fwrules/emerging-Block-IPs.txt"
