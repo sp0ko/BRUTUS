@@ -38,19 +38,19 @@ class LogFileWatcher(threading.Thread):
         self.on_alert = on_alert
         self.whitelist_nets = whitelist_nets or []
         self.poll_interval = poll_interval
-        self._stop = threading.Event()
+        self._stop_event = threading.Event()
 
     def run(self) -> None:
         log.info(i18n.get_T()["lm_monitoring"], self.path, self.parser.name)
         self._tail()
 
     def stop(self) -> None:
-        self._stop.set()
+        self._stop_event.set()
 
     # ------------------------------------------------------------------
 
     def _tail(self) -> None:
-        while not self._stop.is_set():
+        while not self._stop_event.is_set():
             if not os.path.exists(self.path):
                 log.warning(i18n.get_T()["lm_no_file"], self.path)
                 time.sleep(2)
@@ -59,7 +59,7 @@ class LogFileWatcher(threading.Thread):
                 with open(self.path, "r", encoding="utf-8", errors="replace") as fh:
                     fh.seek(0, 2)
                     log.info(i18n.get_T()["lm_ready"], self.path)
-                    while not self._stop.is_set():
+                    while not self._stop_event.is_set():
                         line = fh.readline()
                         if not line:
                             try:

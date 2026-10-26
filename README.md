@@ -10,10 +10,18 @@
  ██████╔╝██████╔╝██║   ██║   ██║   ██║   ██║███████╗
  ██╔══██╗██╔══██╗██║   ██║   ██║   ██║   ██║╚════██║
  ██████╔╝██║  ██║╚██████╔╝   ██║   ╚██████╔╝███████║
- ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.4.0
+ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.5.0
 ```
 
 ---
+
+## What's new in v1.5.0
+
+| | |
+|---|---|
+| ⏪ **Replay mode** | `--replay FILE` analyses an existing log (also `.gz`) offline — read-only, no blocking or webhooks |
+| 🐛 **Threat-intel fix** | A threat-intel match no longer crashes alert handling (missing logger in `main.py`) |
+| 🧪 **117 tests** | New integration tests: log tailing & rotation, UDP syslog, alert dispatcher, threat-intel updates, CLI |
 
 ## What's new in v1.4.0
 
@@ -163,6 +171,7 @@ python main.py [options]
   --slack-url URL       Slack webhook (overrides config file)
   --test                Simulate an attack — tests webhooks end-to-end
   --stats               Show active IPs and exit
+  --replay FILE         Replay an existing log (also .gz) offline and exit
   --blocked             Show blocked IPs report and exit
   --update-threat-db    Download/update IP reputation DB and exit
   --geoip-db PATH       Path to GeoLite2-City.mmdb for offline geolocation
@@ -231,6 +240,17 @@ python main.py --blocked
 IPv6 addresses are handled via `ip6tables` automatically.
 
 ---
+
+## Replay: check detection on real logs
+
+Wondering how BRUTU$ would have reacted to what already happened on your server? Replay any existing log — no waiting for an attack:
+
+```bash
+python main.py --replay /var/log/auth.log
+python main.py --replay /var/log/auth.log.2.gz --threshold 3 --window 120
+```
+
+Replay is read-only: it prints alerts and a summary (lines, failed/successful logins, alerts, most active IPs) and **never blocks IPs, sends webhooks or writes reports**. The sliding window follows the timestamps inside the log, so months-old files work. Your `whitelist` and threat-intel settings are honoured; line-based logs only (`linux_ssh`).
 
 ## systemd journal (journald)
 

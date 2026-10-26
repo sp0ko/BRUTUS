@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-BRUTU$ v1.4.0
+BRUTU$ v1.5.0
 =============
 Real-time SSH/RDP brute-force attack detector.
 
@@ -41,8 +41,10 @@ from utils.blocker import IPBlocker
 from utils.ip_utils import parse_cidr_list
 from utils.threat_intel import ThreatIntel
 
-VERSION = "1.4.0"
+VERSION = "1.5.0"
 DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "config.yaml")
+
+log = logging.getLogger("brute-force-detector")
 
 BANNER = r"""
  ██████╗ ██████╗ ██╗   ██╗████████╗██╗   ██╗███████╗
@@ -239,6 +241,43 @@ def run_test_mode(dispatcher: AlertDispatcher, tracker: BruteForceTracker, T: di
     print(T["test_end"])
 
 
+def run_replay(path: str, cfg: dict, args: argparse.Namespace, T: dict,
+               threat_intel: ThreatIntel) -> int:
+    """Analyse an existing log offline: console output only, nothing is blocked or sent."""
+    from detector.replay import replay_file
+
+    det_cfg = cfg.get("detection", {})
+    tracker = BruteForceTracker(
+        threshold=det_cfg.get("threshold", 5),
+        time_window=det_cfg.get("time_window", 60),
+        alert_cooldown=det_cfg.get("alert_cooldown", 300),
+        success_failure_threshold=det_cfg.get("success_failure_threshold", 3),
+        spray_username_threshold=det_cfg.get("spray_username_threshold", 8),
+    )
+    dispatcher = AlertDispatcher(
+        console=ConsoleAlert(), discord=None, slack=None, report_manager=None,
+        geo=GeoLocator(enabled=False), blocker=None,
+        threat_intel=threat_intel,
+    )
+    parser_type = args.type or "linux_ssh"
+    print(T["replay_start"] % (path, parser_type))
+    try:
+        result = replay_file(
+            path, parser_type, tracker, on_alert=dispatcher.dispatch,
+            whitelist_nets=parse_cidr_list(cfg.get("whitelist", [])),
+        )
+    except (OSError, ValueError) as exc:
+        print(T["replay_err"] % (path, exc), file=sys.stderr)
+        return 1
+
+    print(T["replay_summary"] % (result.lines, result.failed, result.success, len(result.alerts)))
+    if result.top_ips:
+        print(T["replay_top"])
+        for ip, n in result.top_ips[:10]:
+            print(f"  {ip:<40} {n}")
+    return 0
+
+
 def print_stats(tracker: BruteForceTracker, T: dict) -> None:
     stats = tracker.get_stats()
     if not stats:
@@ -280,6 +319,7 @@ def build_arg_parser(T: dict) -> argparse.ArgumentParser:
     p.add_argument("--update-threat-db", action="store_true", help=T["help_update_ti"])
     p.add_argument("--lang",        choices=["pl", "en"],   help=T["help_lang"])
     p.add_argument("--geoip-db",    metavar="FILE",          help=T["help_geoip_db"])
+    p.add_argument("--replay",      metavar="FILE",          help=T["help_replay"])
     p.add_argument("--version",     action="version",       version=f"BRUTU$ {VERSION}")
     return p
 
@@ -412,6 +452,9 @@ def main() -> int:
     if args.test:
         run_test_mode(dispatcher, tracker, T)
         return 0
+
+    if args.replay:
+        return run_replay(args.replay, cfg, args, T, threat_intel)
 
     if args.stats:
         print_stats(tracker, T)

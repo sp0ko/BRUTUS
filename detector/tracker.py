@@ -52,12 +52,16 @@ class BruteForceTracker:
         alert_cooldown: int = 300,
         success_failure_threshold: int = 3,
         spray_username_threshold: int = 8,
+        use_event_time: bool = False,
     ) -> None:
         self.threshold = threshold
         self.time_window = time_window
         self.alert_cooldown = alert_cooldown
         self.success_failure_threshold = success_failure_threshold
         self.spray_username_threshold = spray_username_threshold
+        # True = the sliding window follows event timestamps (replaying old logs)
+        # instead of the wall clock.
+        self.use_event_time = use_event_time
 
         # ip -> deque of (timestamp, username, attack_type, log_source)
         self._failed: Dict[str, deque] = defaultdict(deque)
@@ -83,7 +87,7 @@ class BruteForceTracker:
         with self._lock:
             bucket = self._failed[ip]
             bucket.append((timestamp, username, attack_type, log_source))
-            self._evict_old(bucket, time.time())
+            self._evict_old(bucket, timestamp if self.use_event_time else time.time())
 
             count = len(bucket)
             unique_users = len({e[1] for e in bucket if e[1]})
