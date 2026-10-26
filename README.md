@@ -10,10 +10,18 @@
  ██████╔╝██████╔╝██║   ██║   ██║   ██║   ██║███████╗
  ██╔══██╗██╔══██╗██║   ██║   ██║   ██║   ██║╚════██║
  ██████╔╝██║  ██║╚██████╔╝   ██║   ╚██████╔╝███████║
- ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.3.1
+ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.4.0
 ```
 
 ---
+
+## What's new in v1.4.0
+
+| | |
+|---|---|
+| 📜 **systemd journal source** | New `journald:` config section — follows `journalctl -f` on hosts without `/var/log/auth.log` |
+| ⚙️ **systemd service** | Ready-made unit in `deploy/brutus.service` |
+| ✅ **CI** | GitHub Actions runs the test suite on Python 3.10–3.13 for every push and PR |
 
 ## What's new in v1.3.1
 
@@ -46,6 +54,7 @@
 | 🐧 **Linux SSH** | `/var/log/auth.log`, `/var/log/secure` — regex on syslog format |
 | 🪟 **Windows RDP** | `.evtx` files, Event ID 4625 / 4624, or live Windows Event Log |
 | 📡 **Central syslog** | Receives auth logs from remote machines over UDP/TCP — no agent needed |
+| 📜 **systemd journal** | Follows `journalctl -f` for hosts without `/var/log/auth.log` — see [systemd journal](#systemd-journal-journald) |
 | ⚡ **Real-time tail** | Reacts in a fraction of a second, just like `tail -f` |
 
 ### 🛡️ Active defense
@@ -220,6 +229,42 @@ python main.py --blocked
 ```
 
 IPv6 addresses are handled via `ip6tables` automatically.
+
+---
+
+## systemd journal (journald)
+
+Many modern distributions log SSH only to the systemd journal, so `/var/log/auth.log` does not exist. Enable the journald source instead of (or next to) log files:
+
+```yaml
+journald:
+  enabled: true
+  units: [ssh, sshd, xrdp-sesman]   # Debian/Ubuntu use "ssh", RHEL/Fedora use "sshd"
+  parser: linux_ssh
+```
+
+BRUTUS runs `journalctl -f` for these units (new entries only) and restarts it if it exits. Reading the journal requires root or membership in the `systemd-journal` group.
+
+## Running as a systemd service
+
+A ready-made unit is in [`deploy/brutus.service`](deploy/brutus.service):
+
+```bash
+sudo cp -r . /opt/brutus && cd /opt/brutus
+sudo python3 -m venv .venv && sudo .venv/bin/pip install -r requirements.txt
+sudo cp deploy/brutus.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now brutus
+journalctl -u brutus -f        # BRUTUS' own logs
+```
+
+## Development
+
+Tests run on every push and pull request via GitHub Actions ([`tests.yml`](.github/workflows/tests.yml)). Locally:
+
+```bash
+python -m unittest discover -s tests -t . -v
+```
 
 ---
 

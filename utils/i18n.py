@@ -134,6 +134,11 @@ STRINGS: dict = {
         "syslog_started":     "Serwer syslog: nasłuchuje na %s:%d/%s",
         "syslog_disabled":    "Serwer syslog: wyłączony",
         "syslog_bind_err":    "Serwer syslog: błąd bind %s:%d — %s",
+        "journald_started":   "Journald: monitoruję jednostki: %s",
+        "journald_disabled":  "Journald: wyłączony",
+        "journald_missing":   "Journald: nie znaleziono 'journalctl' — źródło wyłączone",
+        "journald_err":       "Journald: błąd odczytu — %s",
+        "journald_restart":   "Journald: proces zakończył się, ponowne uruchomienie za %ds",
     },
     "en": {
         # ── main.py ──────────────────────────────────────────────────────────
@@ -256,6 +261,11 @@ STRINGS: dict = {
         "syslog_started":     "Syslog server: listening on %s:%d/%s",
         "syslog_disabled":    "Syslog server: disabled",
         "syslog_bind_err":    "Syslog server: bind error %s:%d — %s",
+        "journald_started":   "Journald: watching units: %s",
+        "journald_disabled":  "Journald: disabled",
+        "journald_missing":   "Journald: 'journalctl' not found — source disabled",
+        "journald_err":       "Journald: read error — %s",
+        "journald_restart":   "Journald: process exited, restarting in %ds",
     },
 }
 

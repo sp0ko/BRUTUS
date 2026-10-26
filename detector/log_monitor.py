@@ -7,6 +7,7 @@ parses new lines, feeds events to the BruteForceTracker.
 
 import os
 import socketserver
+import subprocess
 import time
 import threading
 import logging
@@ -229,6 +230,137 @@ class SyslogWatcher(threading.Thread):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# systemd journal
+# ──────────────────────────────────────────────────────────────────────────────
+
+DEFAULT_JOURNALD_UNITS = ["ssh", "sshd", "xrdp-sesman"]
+
+
+class JournaldWatcher(threading.Thread):
+    """
+    Follows the systemd journal (``journalctl -f``) and feeds the lines through
+    the same parser/tracker pipeline as LogFileWatcher.
+
+    For systems that log SSH only to the journal (no /var/log/auth.log).
+    ``command`` can be overridden (used by tests).
+    """
+
+    RESTART_DELAY = 2  # seconds before journalctl is restarted after exiting
+
+    def __init__(
+        self,
+        units: Optional[List[str]] = None,
+        parser_type: str = "linux_ssh",
+        tracker: BruteForceTracker = None,
+        on_alert: Callable[[AlertEvent], None] = None,
+        whitelist_nets: Optional[list] = None,
+        command: Optional[List[str]] = None,
+    ) -> None:
+        super().__init__(daemon=True, name="journald")
+        self.units          = list(units) if units else list(DEFAULT_JOURNALD_UNITS)
+        self.parser         = get_parser(parser_type)
+        self.tracker        = tracker
+        self.on_alert       = on_alert
+        self.whitelist_nets = whitelist_nets or []
+        self.command        = command or self._build_command(self.units)
+        self._stop_event    = threading.Event()
+        self._proc: Optional[subprocess.Popen] = None
+
+    @staticmethod
+    def _build_command(units: List[str]) -> List[str]:
+        # -n 0: only new entries; -o short: syslog-like lines the parser understands
+        cmd = ["journalctl", "-f", "-n", "0", "-o", "short", "--no-pager"]
+        for unit in units:
+            cmd += ["-u", unit]
+        return cmd
+
+    def run(self) -> None:
+        T = i18n.get_T()
+        log.info(T["journald_started"], ", ".join(self.units))
+        while not self._stop_event.is_set():
+            try:
+                self._proc = subprocess.Popen(
+                    self.command,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                )
+            except FileNotFoundError:
+                log.error(i18n.get_T()["journald_missing"])
+                return
+            except OSError as exc:
+                log.error(i18n.get_T()["journald_err"], exc)
+                return
+
+            try:
+                for line in self._proc.stdout:
+                    if self._stop_event.is_set():
+                        break
+                    self._process_line(line)
+            except (OSError, ValueError) as exc:
+                if not self._stop_event.is_set():
+                    log.error(i18n.get_T()["journald_err"], exc)
+            finally:
+                self._terminate()
+
+            if self._stop_event.is_set():
+                break
+            log.warning(i18n.get_T()["journald_restart"], self.RESTART_DELAY)
+            self._stop_event.wait(self.RESTART_DELAY)
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        self._terminate()
+
+    def _terminate(self) -> None:
+        proc = self._proc
+        if proc is None:
+            return
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+        if proc.stdout and not proc.stdout.closed:
+            proc.stdout.close()
+
+    def _process_line(self, line: str) -> None:
+        from utils.ip_utils import ip_in_list
+        try:
+            event = self.parser.parse_line(line)
+        except Exception as exc:
+            log.debug(i18n.get_T()["lm_parse_err"], exc)
+            return
+        if event is None:
+            return
+        if self.whitelist_nets and ip_in_list(event.ip, self.whitelist_nets):
+            return
+        if event.event_type == "FAILED":
+            alert = self.tracker.record_failed(
+                ip=event.ip, username=event.username,
+                attack_type=event.attack_type, log_source="journald",
+                timestamp=event.timestamp or None,
+            )
+        elif event.event_type == "SUCCESS":
+            alert = self.tracker.record_success(
+                ip=event.ip, username=event.username,
+                attack_type=event.attack_type, log_source="journald",
+                timestamp=event.timestamp or None,
+            )
+        else:
+            return
+        if alert:
+            try:
+                self.on_alert(alert)
+            except Exception as exc:
+                log.error(i18n.get_T()["lm_alert_err"], exc)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 
 class LogMonitor:
 
@@ -260,6 +392,17 @@ class LogMonitor:
         self._watchers.append(SyslogWatcher(
             host=host, port=port, protocol=protocol,
             parser_type=parser_type,
+            tracker=self.tracker, on_alert=self._dispatch,
+            whitelist_nets=self.whitelist_nets,
+        ))
+
+    def add_journald_source(
+        self,
+        units: Optional[List[str]] = None,
+        parser_type: str = "linux_ssh",
+    ) -> None:
+        self._watchers.append(JournaldWatcher(
+            units=units, parser_type=parser_type,
             tracker=self.tracker, on_alert=self._dispatch,
             whitelist_nets=self.whitelist_nets,
         ))

@@ -48,6 +48,15 @@ syslog:
   protocol: udp          # udp | tcp
   parser: linux_ssh      # parser for incoming messages
 
+# ── systemd journal ───────────────────────────────────────────────────────────
+# For systems that log SSH only to the journal (no /var/log/auth.log).
+# Needs read access to the journal: run as root or add the user to the
+# 'systemd-journal' group.
+journald:
+  enabled: false
+  units: [ssh, sshd, xrdp-sesman]   # systemd units to follow
+  parser: linux_ssh
+
 geo:
   enabled: true
   cache_ttl: 3600

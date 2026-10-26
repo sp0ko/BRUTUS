@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-BRUTU$ v1.3.1
+BRUTU$ v1.4.0
 =============
 Real-time SSH/RDP brute-force attack detector.
 
@@ -41,7 +41,7 @@ from utils.blocker import IPBlocker
 from utils.ip_utils import parse_cidr_list
 from utils.threat_intel import ThreatIntel
 
-VERSION = "1.3.1"
+VERSION = "1.4.0"
 DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "config.yaml")
 
 BANNER = r"""
@@ -427,7 +427,8 @@ def main() -> int:
 
     log_files = [f for f in cfg.get("log_files", []) if f.get("enabled", True)]
     sl_cfg = cfg.get("syslog", {})
-    if not log_files and not sl_cfg.get("enabled"):
+    jd_cfg = cfg.get("journald", {})
+    if not log_files and not sl_cfg.get("enabled") and not jd_cfg.get("enabled"):
         logger.error(T["no_log_files"])
         return 1
 
@@ -444,6 +445,14 @@ def main() -> int:
         )
     else:
         logger.info(T["syslog_disabled"])
+
+    if jd_cfg.get("enabled"):
+        monitor.add_journald_source(
+            units=jd_cfg.get("units"),
+            parser_type=jd_cfg.get("parser", "linux_ssh"),
+        )
+    else:
+        logger.info(T["journald_disabled"])
 
     monitor.start()
 

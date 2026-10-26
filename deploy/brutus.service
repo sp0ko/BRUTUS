@@ -1,0 +1,43 @@
+# systemd unit for BRUTU$
+#
+# Install:
+#   sudo cp -r . /opt/brutus && cd /opt/brutus
+#   sudo python3 -m venv .venv && sudo .venv/bin/pip install -r requirements.txt
+#   sudo cp deploy/brutus.service /etc/systemd/system/brutus.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now brutus
+#
+# Logs:  journalctl -u brutus -f
+# Edit /opt/brutus/config.yaml (e.g. journald.enabled: true), then:
+#   sudo systemctl restart brutus
+
+[Unit]
+Description=BRUTU$ SSH/RDP brute-force detector
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/brutus
+ExecStart=/opt/brutus/.venv/bin/python main.py --lang en
+Restart=on-failure
+RestartSec=5
+
+# Root is needed for the iptables blocker and for reading auth logs / the journal.
+# If you only detect and alert (blocker.enabled: false), run as an unprivileged
+# user in the 'adm' and 'systemd-journal' groups instead (User=brutus).
+User=root
+
+# Hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/opt/brutus/reports /opt/brutus/logs
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_DAC_READ_SEARCH
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+
+[Install]
+WantedBy=multi-user.target
