@@ -10,10 +10,19 @@
  ██████╔╝██████╔╝██║   ██║   ██║   ██║   ██║███████╗
  ██╔══██╗██╔══██╗██║   ██║   ██║   ██║   ██║╚════██║
  ██████╔╝██║  ██║╚██████╔╝   ██║   ╚██████╔╝███████║
- ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.5.0
+ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.6.0
 ```
 
 ---
+
+## What's new in v1.6.0
+
+| | |
+|---|---|
+| 📊 **Summary report** | `--report` aggregates `alerts.jsonl` (top IPs, countries, accounts, attack types, timeline) as text, Markdown, JSON or HTML |
+| 🖥️ **Dashboard** | `--dashboard` serves a self-contained web page on `127.0.0.1:8080` (no external assets, auto-refresh) |
+| 🛡️ **Safe by default** | All data HTML-escaped, strict CSP, loopback bind with a warning otherwise |
+| 🧩 **Reports keep `threat_intel`** | Alert records now store the matched feed |
 
 ## What's new in v1.5.0
 
@@ -172,6 +181,13 @@ python main.py [options]
   --test                Simulate an attack — tests webhooks end-to-end
   --stats               Show active IPs and exit
   --replay FILE         Replay an existing log (also .gz) offline and exit
+  --report              Print an aggregated report from alerts.jsonl and exit
+  --since PERIOD        Report period: 24h, 7d, 2w, all (default 7d)
+  --format FMT          Report format: text | markdown | json | html
+  --output FILE         Write the report to a file
+  --dashboard           Start the local web dashboard
+  --dashboard-host H    Dashboard bind address (default 127.0.0.1)
+  --dashboard-port N    Dashboard port (default 8080)
   --blocked             Show blocked IPs report and exit
   --update-threat-db    Download/update IP reputation DB and exit
   --geoip-db PATH       Path to GeoLite2-City.mmdb for offline geolocation
@@ -251,6 +267,19 @@ python main.py --replay /var/log/auth.log.2.gz --threshold 3 --window 120
 ```
 
 Replay is read-only: it prints alerts and a summary (lines, failed/successful logins, alerts, most active IPs) and **never blocks IPs, sends webhooks or writes reports**. The sliding window follows the timestamps inside the log, so months-old files work. Your `whitelist` and threat-intel settings are honoured; line-based logs only (`linux_ssh`).
+
+## Summary report & dashboard
+
+```bash
+python main.py --report                                   # last 7 days, text
+python main.py --report --since 30d --format markdown --output weekly.md
+python main.py --report --since all --format html --output report.html
+python main.py --dashboard                                # http://127.0.0.1:8080/
+```
+
+Both read the file from `reports.output_path` (default `reports/alerts.jsonl`). The dashboard offers `?since=24h|7d|30d|all`, a JSON API at `/api/summary`, and refreshes every 30 s. It is read-only and has **no authentication**: keep it on `127.0.0.1` and reach it through an SSH tunnel (`ssh -L 8080:127.0.0.1:8080 host`) or a password-protected reverse proxy. Usernames come from attacker-controlled log lines, so everything is HTML-escaped and a strict Content-Security-Policy is sent.
+
+Cron example — weekly Markdown report: `0 8 * * 1 cd /opt/brutus && python3 main.py --report --since 7d --format markdown --output /var/reports/brutus-weekly.md`
 
 ## systemd journal (journald)
 

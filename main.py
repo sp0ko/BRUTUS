@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-BRUTU$ v1.5.0
+BRUTU$ v1.6.0
 =============
 Real-time SSH/RDP brute-force attack detector.
 
@@ -41,7 +41,7 @@ from utils.blocker import IPBlocker
 from utils.ip_utils import parse_cidr_list
 from utils.threat_intel import ThreatIntel
 
-VERSION = "1.5.0"
+VERSION = "1.6.0"
 DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "config.yaml")
 
 log = logging.getLogger("brute-force-detector")
@@ -320,8 +320,65 @@ def build_arg_parser(T: dict) -> argparse.ArgumentParser:
     p.add_argument("--lang",        choices=["pl", "en"],   help=T["help_lang"])
     p.add_argument("--geoip-db",    metavar="FILE",          help=T["help_geoip_db"])
     p.add_argument("--replay",      metavar="FILE",          help=T["help_replay"])
+    p.add_argument("--report",      action="store_true",    help=T["help_report"])
+    p.add_argument("--since",       default="7d",           help=T["help_since"])
+    p.add_argument("--format",      choices=["text", "markdown", "json", "html"], default="text",
+                   help=T["help_format"])
+    p.add_argument("--output",      metavar="FILE",          help=T["help_output"])
+    p.add_argument("--dashboard",   action="store_true",    help=T["help_dashboard"])
+    p.add_argument("--dashboard-host", default="127.0.0.1",  help=T["help_dash_host"])
+    p.add_argument("--dashboard-port", type=int, default=8080, help=T["help_dash_port"])
     p.add_argument("--version",     action="version",       version=f"BRUTU$ {VERSION}")
     return p
+
+
+def run_report(path: str, args: argparse.Namespace, T: dict) -> int:
+    import json as _json
+    from detector.dashboard import build_summary, render_html
+    from detector.stats import render_markdown, render_text
+    try:
+        summary = build_summary(path, args.since)
+    except (ValueError, OSError) as exc:
+        print(T["report_err"] % exc, file=sys.stderr)
+        return 1
+    if args.format == "json":
+        out = _json.dumps(summary, ensure_ascii=False, indent=2)
+    elif args.format == "markdown":
+        out = render_markdown(summary, T)
+    elif args.format == "html":
+        out = render_html(summary, T, period=args.since, links=False)
+    else:
+        out = render_text(summary, T)
+    if args.output:
+        try:
+            with open(args.output, "w", encoding="utf-8") as fh:
+                fh.write(out + "\n")
+        except OSError as exc:
+            print(T["report_err"] % exc, file=sys.stderr)
+            return 1
+        print(T["report_saved"] % args.output)
+    else:
+        print(out)
+    return 0
+
+
+def run_dashboard(path: str, args: argparse.Namespace, T: dict) -> int:
+    from detector.dashboard import create_server, is_loopback
+    try:
+        server = create_server(path, args.dashboard_host, args.dashboard_port)
+    except OSError as exc:
+        print(T["dash_err"] % exc, file=sys.stderr)
+        return 1
+    if not is_loopback(args.dashboard_host):
+        print(T["dash_exposed"] % args.dashboard_host, file=sys.stderr)
+    print(T["dash_started"] % (args.dashboard_host, server.server_address[1]))
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+    return 0
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -452,6 +509,13 @@ def main() -> int:
     if args.test:
         run_test_mode(dispatcher, tracker, T)
         return 0
+
+    report_path = (cfg.get("reports") or {}).get("output_path", "reports/alerts.jsonl")
+    if args.report:
+        return run_report(report_path, args, T)
+
+    if args.dashboard:
+        return run_dashboard(report_path, args, T)
 
     if args.replay:
         return run_replay(args.replay, cfg, args, T, threat_intel)

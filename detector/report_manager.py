@@ -29,6 +29,7 @@ class ReportManager:
             "last_seen": datetime.utcfromtimestamp(event.last_seen).isoformat() + "Z",
             "successful_login": event.successful_login,
             "geo": geo,
+            "threat_intel": event.threat_intel,
         }
         with self._lock:
             with open(self._path, "a", encoding="utf-8") as fh:
