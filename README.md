@@ -21,7 +21,7 @@
 |---|---|
 | 🎯 **Configurable TI action** | `action_on_threat_intel_match: block \| alert_only` — decide whether a threat intel match triggers a block or just an alert |
 | 📋 **Custom source list** | `threat_intel.sources` now accepts a plain URL list in `config.yaml` — swap feeds without touching code |
-| 🔄 **6 feeds by default** | Added **blocklist.de SSH** feed alongside existing Spamhaus / Firehol / CINS / Emerging Threats |
+| 🔄 **7 configured feeds** | Includes **Feodo Tracker** botnet C2 IPs and **blocklist.de SSH**, alongside Spamhaus / Firehol / CINS / Emerging Threats |
 
 ---
 
@@ -46,7 +46,7 @@
 | | |
 |---|---|
 | 🚫 **IP blocker** | Adds iptables DROP rules automatically (requires root) |
-| 🕵️ **Threat intel** | Offline blocklists — Spamhaus, Firehol L1, CINS Army, Emerging Threats |
+| 🕵️ **Threat intel** | Offline blocklists — Spamhaus, Firehol L1, CINS Army, Emerging Threats, Feodo Tracker |
 | ✅ **IP whitelist** | Your home / VPN / CI never triggers a block or alert |
 | 🔕 **Cooldown** | Same IP won't flood you with alerts — one notification per X minutes |
 
@@ -254,6 +254,7 @@ BRUTUS checks every detected attacker against free public blocklists stored **lo
 | **Firehol Level 1** | Aggregated from ~30 verified sources |
 | **CINS Army** | Active botnets tracked by Shadowserver |
 | **Emerging Threats** | IPs actively attacking infrastructure |
+| **Feodo Tracker** | Botnet command-and-control server IPs |
 
 ### Setup
 
@@ -293,6 +294,7 @@ threat_intel:
     - "https://lists.blocklist.de/lists/ssh.txt"
     - "https://cinsscore.com/list/ci-badguys.txt"
     - "https://rules.emergingthreats.net/fwrules/emerging-Block-IPs.txt"
+    - "https://feodotracker.abuse.ch/downloads/ipblocklist_recommended.txt"
 ```
 
 | `action_on_threat_intel_match` | Behaviour |

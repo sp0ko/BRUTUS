@@ -11,6 +11,7 @@ Default sources
   • Firehol Level 1 — aggregated from ~30 verified sources
   • CINS Army       — bad guys identified by Shadowserver/CINS
   • Emerging Threats — IPs that actively attack infrastructure
+  • Feodo Tracker   — botnet command-and-control servers
 
 Usage
 -----
@@ -38,6 +39,7 @@ DEFAULT_SOURCES: Dict[str, str] = {
     "firehol_l1":       "https://iplists.firehol.org/files/firehol_level1.netset",
     "cins_army":        "https://cinsscore.com/list/ci-badguys.txt",
     "emerging_threats": "https://rules.emergingthreats.net/fwrules/emerging-Block-IPs.txt",
+    "feodo_tracker":    "https://feodotracker.abuse.ch/downloads/ipblocklist_recommended.txt",
 }
 
 _DB_HEADER = (
