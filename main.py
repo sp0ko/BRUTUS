@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-BRUTU$ v1.7.0
+BRUTU$ v1.8.0
 =============
 Real-time SSH/RDP brute-force attack detector.
 
@@ -30,6 +30,7 @@ from typing import Optional
 import yaml
 
 from detector.tracker import BruteForceTracker, AlertEvent
+from detector.state import StatePersister, load_state
 from detector.log_monitor import LogMonitor
 from detector.report_manager import ReportManager
 from detector.alerts.console_alert import ConsoleAlert
@@ -529,6 +530,15 @@ def main() -> int:
     if args.replay:
         return run_replay(args.replay, cfg, args, T, threat_intel)
 
+    state_cfg = cfg.get("state") or {}
+    state_path = state_cfg.get("path", "reports/tracker_state.json")
+    persister: Optional[StatePersister] = None
+    if state_cfg.get("enabled", True):
+        restored = load_state(tracker, state_path)
+        if restored:
+            logger.info(T["state_restored"], restored, state_path)
+        persister = StatePersister(tracker, state_path, state_cfg.get("save_interval", 30))
+
     if args.stats:
         print_stats(tracker, T)
         return 0
@@ -571,6 +581,8 @@ def main() -> int:
         logger.info(T["journald_disabled"])
 
     monitor.start()
+    if persister:
+        persister.start()
 
     stop_event = threading.Event()
 
@@ -595,6 +607,8 @@ def main() -> int:
                             len(stats), top_ip, stats[top_ip]["count"])
     finally:
         monitor.stop()
+        if persister:
+            persister.stop()
         if blocker.enabled:
             unblocked = blocker.unblock_all()
             if unblocked:

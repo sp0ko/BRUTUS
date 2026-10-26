@@ -153,6 +153,63 @@ class BruteForceTracker:
                     }
         return stats
 
+    # ------------------------------------------------------------------
+    # Persistence (see detector/state.py)
+    # ------------------------------------------------------------------
+
+    def export_state(self) -> dict:
+        """JSON-serialisable snapshot of everything that matters across a restart."""
+        now = time.time()
+        with self._lock:
+            return {
+                "failed": {
+                    ip: [list(e) for e in bucket if e[0] >= now - self.time_window]
+                    for ip, bucket in self._failed.items() if bucket
+                },
+                "last_alert": {ip: t for ip, t in self._last_alert.items() if now - t < self.alert_cooldown},
+                "total_triggered": dict(self._total_triggered),
+            }
+
+    def import_state(self, data: dict) -> int:
+        """Merge a snapshot made by export_state().  Returns the number of attempts restored.
+
+        Entries older than the sliding window / cooldown are dropped; malformed
+        entries are skipped.  Existing in-memory entries are kept.
+        """
+        now = time.time()
+        restored = 0
+        with self._lock:
+            for ip, entries in (data.get("failed") or {}).items():
+                if not isinstance(ip, str) or not isinstance(entries, list):
+                    continue
+                bucket = self._failed[ip]
+                known = set(bucket)
+                for e in entries:
+                    try:
+                        ts, user, atype, src = float(e[0]), str(e[1]), str(e[2]), str(e[3])
+                    except (TypeError, ValueError, IndexError):
+                        continue
+                    if ts < now - self.time_window or ts > now + 60 or (ts, user, atype, src) in known:
+                        continue
+                    bucket.append((ts, user, atype, src))
+                    restored += 1
+                items = sorted(bucket, key=lambda e: e[0])
+                bucket.clear()
+                bucket.extend(items)
+                if not bucket:
+                    del self._failed[ip]
+            for ip, t in (data.get("last_alert") or {}).items():
+                try:
+                    t = float(t)
+                except (TypeError, ValueError):
+                    continue
+                if isinstance(ip, str) and now - t < self.alert_cooldown:
+                    self._last_alert[ip] = max(t, self._last_alert.get(ip, 0.0))
+            for ip, n in (data.get("total_triggered") or {}).items():
+                if isinstance(ip, str) and isinstance(n, int) and n > 0:
+                    self._total_triggered[ip] = max(n, self._total_triggered[ip])
+        return restored
+
     def reset_ip(self, ip: str) -> None:
         with self._lock:
             self._failed.pop(ip, None)

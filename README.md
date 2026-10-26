@@ -10,10 +10,17 @@
  ██████╔╝██████╔╝██║   ██║   ██║   ██║   ██║███████╗
  ██╔══██╗██╔══██╗██║   ██║   ██║   ██║   ██║╚════██║
  ██████╔╝██║  ██║╚██████╔╝   ██║   ╚██████╔╝███████║
- ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.7.0
+ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.8.0
 ```
 
 ---
+
+## What's new in v1.8.0
+
+| | |
+|---|---|
+| 💾 **Persistent state** | Sliding-window counters, alert cooldowns and trigger counts survive restarts and crashes — an attack in progress isn't forgotten, an IP just reported isn't re-alerted |
+| 📊 **`--stats`** | Now shows the restored state instead of an always-empty tracker |
 
 ## What's new in v1.7.0
 
@@ -303,6 +310,19 @@ blocker:
 These addresses are never blocked (a warning is logged, the alert is still sent): loopback, link-local, multicast, **this host's own addresses**, everything in `blocker.trusted_proxies`, and — with `protect_private: true` — all private ranges. Use `trusted_proxies` for your reverse proxy / CDN: behind one, HTTP logs contain the proxy's address, and blocking it would take the whole site down. (`whitelist` is stricter: whitelisted IPs are ignored entirely — no alerts, no blocks. `trusted_proxies` only protects from blocking and still alerts.) Private ranges are *not* protected by default so LAN-based tests still work; turn `protect_private` on for production servers.
 
 ---
+
+## Persistent state
+
+```yaml
+state:
+  enabled: true                       # default
+  path: reports/tracker_state.json
+  save_interval: 30                   # seconds (only written when something changed; also on shutdown)
+```
+
+On start BRUTU$ restores attempts still inside the detection window and cooldowns still running; anything older is dropped. The file is written atomically with mode `0600` (it contains IPs and usernames), a corrupt or unknown-format file is ignored with a warning, and replay/test modes never touch it. After a hard crash you lose at most `save_interval` seconds of counters.
+
+Not covered: log lines written **while BRUTU$ was not running** are not read afterwards (tailing starts at the end of the file) — use `--replay` on the log to check that gap.
 
 ## Replay: check detection on real logs
 

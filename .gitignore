@@ -27,6 +27,7 @@ htmlcov/
 
 # Logi i raporty (NIE commituj prawdziwych logów!)
 reports/*.jsonl
+reports/tracker_state.json
 logs/
 
 # WAŻNE: config.yaml może zawierać webhooks/tokeny — nie trafia na GitHub

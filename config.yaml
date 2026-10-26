@@ -89,6 +89,11 @@ blocker:
   protect_private: false      # true = never block private ranges (10/8, 172.16/12, 192.168/16, fc00::/7)
   # Always protected: loopback, link-local, multicast and this host's own addresses
 
+state:
+  enabled: true                          # keep counters/cooldowns across restarts
+  path: reports/tracker_state.json
+  save_interval: 30                      # seconds
+
 whitelist:
   - "127.0.0.1"
   - "::1"
