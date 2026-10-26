@@ -10,10 +10,19 @@
  ██████╔╝██████╔╝██║   ██║   ██║   ██║   ██║███████╗
  ██╔══██╗██╔══██╗██║   ██║   ██║   ██║   ██║╚════██║
  ██████╔╝██║  ██║╚██████╔╝   ██║   ╚██████╔╝███████║
- ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.6.0
+ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.6.1
 ```
 
 ---
+
+## What's new in v1.6.1
+
+| | |
+|---|---|
+| 🌐 **HTTP auth** | New `nginx` / `apache` parsers: Basic-auth failures (access + error logs) and brute force on login panels |
+| 📂 **FTP** | New `ftp` parser: vsftpd, ProFTPD, Pure-FTPd |
+| 🗄️ **MySQL / MariaDB** | New `mysql` parser: "Access denied for user" |
+| 🏷️ **Attack types** | Alerts and reports now show `HTTP`, `FTP`, `MYSQL` next to `SSH` / `RDP` |
 
 ## What's new in v1.6.0
 
@@ -72,6 +81,9 @@
 | 🪟 **Windows RDP** | `.evtx` files, Event ID 4625 / 4624, or live Windows Event Log |
 | 📡 **Central syslog** | Receives auth logs from remote machines over UDP/TCP — no agent needed |
 | 📜 **systemd journal** | Follows `journalctl -f` for hosts without `/var/log/auth.log` — see [systemd journal](#systemd-journal-journald) |
+| 🌐 **nginx / Apache** | HTTP Basic-auth failures and login-panel brute force (WordPress, `/login`, `/admin`, phpMyAdmin…) — see [Other services](#other-services-http-ftp-mysql) |
+| 📂 **FTP** | vsftpd, ProFTPD, Pure-FTPd |
+| 🗄️ **MySQL / MariaDB** | "Access denied" entries from the error log |
 | ⚡ **Real-time tail** | Reacts in a fraction of a second, just like `tail -f` |
 
 ### 🛡️ Active defense
@@ -172,7 +184,7 @@ python main.py [options]
 
   --config PATH         Custom config file path
   --log PATH            Additional log file to monitor
-  --type TYPE           Parser: linux_ssh | windows_evtx
+  --type TYPE           Parser: linux_ssh | windows_evtx | nginx | apache | ftp | mysql
   --threshold N         Number of attempts to trigger an alert
   --window N            Time window in seconds
   --cooldown N          Cooldown between alerts for the same IP
@@ -266,7 +278,7 @@ python main.py --replay /var/log/auth.log
 python main.py --replay /var/log/auth.log.2.gz --threshold 3 --window 120
 ```
 
-Replay is read-only: it prints alerts and a summary (lines, failed/successful logins, alerts, most active IPs) and **never blocks IPs, sends webhooks or writes reports**. The sliding window follows the timestamps inside the log, so months-old files work. Your `whitelist` and threat-intel settings are honoured; line-based logs only (`linux_ssh`).
+Replay is read-only: it prints alerts and a summary (lines, failed/successful logins, alerts, most active IPs) and **never blocks IPs, sends webhooks or writes reports**. The sliding window follows the timestamps inside the log, so months-old files work. Your `whitelist` and threat-intel settings are honoured; line-based logs only (all parsers except `windows_evtx`).
 
 ## Summary report & dashboard
 
@@ -280,6 +292,31 @@ python main.py --dashboard                                # http://127.0.0.1:808
 Both read the file from `reports.output_path` (default `reports/alerts.jsonl`). The dashboard offers `?since=24h|7d|30d|all`, a JSON API at `/api/summary`, and refreshes every 30 s. It is read-only and has **no authentication**: keep it on `127.0.0.1` and reach it through an SSH tunnel (`ssh -L 8080:127.0.0.1:8080 host`) or a password-protected reverse proxy. Usernames come from attacker-controlled log lines, so everything is HTML-escaped and a strict Content-Security-Policy is sent.
 
 Cron example — weekly Markdown report: `0 8 * * 1 cd /opt/brutus && python3 main.py --report --since 7d --format markdown --output /var/reports/brutus-weekly.md`
+
+## Other services: HTTP, FTP, MySQL
+
+Add a `log_files` entry per service (also usable with `--log FILE --type X` and `--replay`):
+
+```yaml
+log_files:
+  - {path: /var/log/nginx/access.log,    type: nginx,  enabled: true}
+  - {path: /var/log/apache2/error.log,   type: apache, enabled: true}
+  - {path: /var/log/vsftpd.log,          type: ftp,    enabled: true}
+  - {path: /var/log/mysql/error.log,     type: mysql,  enabled: true}
+```
+
+| Parser | What counts as a failure | Success (breach detection) |
+|---|---|---|
+| `nginx` / `apache` | `401` **with a username** (Basic auth; a `401` without one is just the browser challenge and is ignored), error-log "password mismatch" / "user not found" (nginx, Apache `AH01617`/`AH01618`), `POST` to a login path (`/login`, `/admin`, `/administrator`, `/user/login`, phpMyAdmin…) answered `401`/`403`, `POST /wp-login.php` answered `200` | `POST /wp-login.php` → `302` |
+| `ftp` | vsftpd `FAIL LOGIN`, ProFTPD `Login failed` / `no such user`, Pure-FTPd `Authentication failed` | vsftpd `OK LOGIN`, ProFTPD `Login successful`, Pure-FTPd `is now logged in` |
+| `mysql` | `Access denied for user 'x'@'IP'` | — (the error log doesn't record successful logins) |
+
+Notes:
+- **Reverse proxy:** behind a proxy/CDN the logs contain the proxy's address. Configure real client IPs first (nginx `realip`, Apache `mod_remoteip`) — otherwise you would alert on (and block!) your own proxy. Use `whitelist` as a safety net.
+- **MySQL logging:** MariaDB needs `log_warnings=2`; MySQL 8 needs `log_error_verbosity=2` or higher. Clients that resolve to hostnames are not reported (use `skip-name-resolve`).
+- **Blocking:** the blocker drops all traffic from the IP, not just the attacked service.
+- Access logs must use the common/combined format; custom `log_format`s are not recognised.
+- Alerts of different services are tracked per IP, so one address attacking SSH and HTTP counts both.
 
 ## systemd journal (journald)
 
@@ -498,6 +535,9 @@ BRUTU/
 │   ├── report_manager.py      ← JSONL report writer
 │   ├── parsers/
 │   │   ├── linux_ssh.py       ← regex parser for auth.log
+│   │   ├── http_auth.py       ← nginx / Apache (Basic auth, login panels)
+│   │   ├── ftp.py             ← vsftpd / ProFTPD / Pure-FTPd
+│   │   ├── mysql.py           ← MySQL / MariaDB error log
 │   │   └── windows_evtx.py    ← EVTX parser + live win32evtlog
 │   └── alerts/
 │       ├── console_alert.py   ← colored terminal output

@@ -23,6 +23,20 @@ log_files:
   #   type: windows_evtx
   #   enabled: false
 
+  # Other services — parsers: nginx | apache | ftp | mysql
+  # - path: /var/log/nginx/access.log     # Basic auth + login panels (wp-login.php, /login, ...)
+  #   type: nginx
+  #   enabled: true
+  # - path: /var/log/apache2/error.log    # Apache Basic auth failures (use type: apache)
+  #   type: apache
+  #   enabled: true
+  # - path: /var/log/vsftpd.log           # vsftpd / proftpd / pure-ftpd
+  #   type: ftp
+  #   enabled: true
+  # - path: /var/log/mysql/error.log      # MySQL/MariaDB "Access denied" (see README)
+  #   type: mysql
+  #   enabled: true
+
 discord:
   enabled: false
   webhook_url: ""   # https://discord.com/api/webhooks/ID/TOKEN
