@@ -26,7 +26,8 @@ def _fake_journal(lines, then_sleep=0):
 
 
 def _failed(ip, user="root"):
-    return f"Oct 26 13:00:00 host sshd[1]: Failed password for {user} from {ip} port 22 ssh2"
+    ts = time.strftime("%b %d %H:%M:%S", time.localtime(time.time() - 5))
+    return f"{ts} host sshd[1]: Failed password for {user} from {ip} port 22 ssh2"
 
 
 class TestJournaldCommand(unittest.TestCase):
