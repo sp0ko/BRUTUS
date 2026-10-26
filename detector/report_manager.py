@@ -30,6 +30,7 @@ class ReportManager:
             "successful_login": event.successful_login,
             "geo": geo,
             "threat_intel": event.threat_intel,
+            "catch_up": event.catch_up,
         }
         with self._lock:
             with open(self._path, "a", encoding="utf-8") as fh:

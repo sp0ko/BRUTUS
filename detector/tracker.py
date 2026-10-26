@@ -27,6 +27,7 @@ class AlertEvent:
     successful_login: bool = False
     geo_info: Optional[dict] = None
     threat_intel: Optional[str] = None   # set to source label when IP is in threat intel DB
+    catch_up: bool = False               # detected in log lines written while BRUTU$ was not running
 
     def is_critical(self) -> bool:
         """Returns True when a successful login follows the brute-force storm."""
@@ -80,14 +81,19 @@ class BruteForceTracker:
         attack_type: str = "SSH",
         log_source: str = "",
         timestamp: Optional[float] = None,
+        use_event_time: Optional[bool] = None,
     ) -> Optional[AlertEvent]:
+        """*use_event_time* overrides the tracker-wide setting for this call
+        (used when catching up on old log lines)."""
         if timestamp is None:
             timestamp = time.time()
+        if use_event_time is None:
+            use_event_time = self.use_event_time
 
         with self._lock:
             bucket = self._failed[ip]
             bucket.append((timestamp, username, attack_type, log_source))
-            self._evict_old(bucket, timestamp if self.use_event_time else time.time())
+            self._evict_old(bucket, timestamp if use_event_time else time.time())
 
             count = len(bucket)
             unique_users = len({e[1] for e in bucket if e[1]})

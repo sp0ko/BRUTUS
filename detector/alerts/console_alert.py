@@ -66,6 +66,9 @@ class ConsoleAlert:
             if geo.get("isp") and geo["isp"] != "unknown":
                 lines.append(T["ca_line_isp"].format(isp=geo['isp']))
 
+        if event.catch_up:
+            lines.append(T["ca_catch_up"])
+
         if event.successful_login:
             lines.append(_c(Fore.RED if _HAS_COLOR else "", T["ca_breach"]))
 

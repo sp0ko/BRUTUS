@@ -93,6 +93,8 @@ state:
   enabled: true                          # keep counters/cooldowns across restarts
   path: reports/tracker_state.json
   save_interval: 30                      # seconds
+  catch_up: true                         # after a restart, process log lines written while BRUTU$ was down
+  catch_up_max_mb: 64                    # max backlog per file; older part is skipped
 
 whitelist:
   - "127.0.0.1"

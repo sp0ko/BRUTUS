@@ -10,10 +10,18 @@
  ██████╔╝██████╔╝██║   ██║   ██║   ██║   ██║███████╗
  ██╔══██╗██╔══██╗██║   ██║   ██║   ██║   ██║╚════██║
  ██████╔╝██║  ██║╚██████╔╝   ██║   ╚██████╔╝███████║
- ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.8.0
+ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.9.0
 ```
 
 ---
+
+## What's new in v1.9.0
+
+| | |
+|---|---|
+| ⏪ **Catch-up after restart** | Log offsets (inode + head hash) are saved with the state, so lines written while BRUTU$ was down are processed on the next start — alerts are sent, but those IPs are **not auto-blocked** (the attack is over, blocking is your call) |
+| 🔄 **Rotation-aware** | Rotation while down (`auth.log` → `auth.log.1`), truncation and replaced files are detected; the unread tail of the rotated file is read first |
+| 🧱 **Safer tailing** | A half-written last line is held until its newline arrives |
 
 ## What's new in v1.8.0
 
@@ -318,11 +326,15 @@ state:
   enabled: true                       # default
   path: reports/tracker_state.json
   save_interval: 30                   # seconds (only written when something changed; also on shutdown)
+  catch_up: true                      # read lines written while BRUTU$ was down
+  catch_up_max_mb: 64                 # max backlog per file; the older part is skipped
 ```
 
 On start BRUTU$ restores attempts still inside the detection window and cooldowns still running; anything older is dropped. The file is written atomically with mode `0600` (it contains IPs and usernames), a corrupt or unknown-format file is ignored with a warning, and replay/test modes never touch it. After a hard crash you lose at most `save_interval` seconds of counters.
 
-Not covered: log lines written **while BRUTU$ was not running** are not read afterwards (tailing starts at the end of the file) — use `--replay` on the log to check that gap.
+**Catch-up.** Per log file BRUTU$ stores the offset, inode and a hash of the first bytes. After a restart it resumes from there: new lines are evaluated with their own timestamps, alerts are sent (marked "found while BRUTU$ was not running", `"catch_up": true` in `alerts.jsonl`) and the IPs are **never blocked**. If the file was rotated meanwhile, the unread tail of `path.1` / `path-*` (uncompressed) is read first, then the new file; a truncated or replaced file is read from the start. On the first start (no saved offset) or with an old state file, tailing begins at the end as before. Set `catch_up: false` to disable.
+
+Not covered: journald and UDP syslog (no replay of missed entries), and files already compressed (`.gz`) by logrotate — use `--replay` for those.
 
 ## Replay: check detection on real logs
 

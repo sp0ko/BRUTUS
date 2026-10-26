@@ -5,6 +5,7 @@ One LogFileWatcher thread per log file.  Tails the file,
 parses new lines, feeds events to the BruteForceTracker.
 """
 
+import contextlib
 import os
 import socketserver
 import subprocess
@@ -14,6 +15,7 @@ import logging
 from typing import List, Callable, Optional
 
 import utils.i18n as i18n
+from .offsets import HEAD_BYTES, OffsetStore, head_hash
 from .tracker import BruteForceTracker, AlertEvent
 from .parsers import get_parser, PARSER_REGISTRY
 
@@ -21,6 +23,20 @@ log = logging.getLogger("brute-force-detector.monitor")
 
 
 class LogFileWatcher(threading.Thread):
+    """
+    Tails one log file (binary-safe, position-tracked).
+
+    With an *offsets* store, the position is remembered across restarts: on
+    start the watcher first processes what was appended while it was not
+    running ("catch-up", flagged on the resulting alerts), then follows the
+    file.  Without a saved position it starts at the end of the file.  Rotated
+    files (the saved inode now lives in ``<path>.1`` etc.) are finished before
+    the new file is read from the beginning; truncated or replaced files are
+    read from the beginning.
+    """
+
+    HEAD_BYTES = HEAD_BYTES
+    _COMPRESSED = (".gz", ".bz2", ".xz", ".zst", ".zip")
 
     def __init__(
         self,
@@ -30,6 +46,8 @@ class LogFileWatcher(threading.Thread):
         on_alert: Callable[[AlertEvent], None],
         whitelist_nets: Optional[list] = None,
         poll_interval: float = 0.25,
+        offsets: Optional[OffsetStore] = None,
+        catch_up_max_bytes: int = 64 * 1024 * 1024,
     ) -> None:
         super().__init__(daemon=True, name=f"watcher:{os.path.basename(path)}")
         self.path = path
@@ -38,7 +56,15 @@ class LogFileWatcher(threading.Thread):
         self.on_alert = on_alert
         self.whitelist_nets = whitelist_nets or []
         self.poll_interval = poll_interval
+        self.offsets = offsets
+        self.catch_up_max_bytes = catch_up_max_bytes
         self._stop_event = threading.Event()
+        self._guard = offsets.lock if offsets else contextlib.nullcontext()
+        self._opened = False                 # has the file been opened before (startup vs. re-open)
+        self._mem: Optional[dict] = None     # position to resume at when re-opening the same file
+        self._head = b""
+        self._inode = 0
+        self._pos = 0
 
     def run(self) -> None:
         log.info(i18n.get_T()["lm_monitoring"], self.path, self.parser.name)
@@ -56,62 +82,194 @@ class LogFileWatcher(threading.Thread):
                 time.sleep(2)
                 continue
             try:
-                with open(self.path, "r", encoding="utf-8", errors="replace") as fh:
-                    fh.seek(0, 2)
-                    log.info(i18n.get_T()["lm_ready"], self.path)
-                    while not self._stop_event.is_set():
-                        line = fh.readline()
-                        if not line:
-                            try:
-                                if os.stat(self.path).st_ino != os.fstat(fh.fileno()).st_ino:
-                                    log.info(i18n.get_T()["lm_rotated"], self.path)
-                                    break
-                                if os.stat(self.path).st_size < fh.tell():
-                                    log.info(i18n.get_T()["lm_truncated"], self.path)
-                                    break
-                            except OSError:
-                                break
-                            time.sleep(self.poll_interval)
-                            continue
-                        self._process_line(line)
+                self._tail_once()
             except OSError as exc:
                 log.error(i18n.get_T()["lm_read_err"], self.path, exc)
                 time.sleep(2)
 
+    def _tail_once(self) -> None:
+        rotated = False
+        with open(self.path, "rb") as fh:
+            st = os.fstat(fh.fileno())
+            self._inode = st.st_ino
+            pos, catch_up = self._start_position(fh, st)
+            self._pos = pos
+            self._head = self._read_head(fh, pos)
+            fh.seek(pos)
+            self._opened = True
+            log.info(i18n.get_T()["lm_ready"], self.path)
+            if catch_up:
+                log.info(i18n.get_T()["lm_catch_up"], self.path, max(st.st_size - pos, 0))
+            try:
+                while not self._stop_event.is_set():
+                    raw = fh.readline()
+                    if raw and not raw.endswith(b"\n"):
+                        fh.seek(-len(raw), 1)  # writer is mid-line: wait for the rest
+                        raw = b""
+                    if not raw:
+                        if catch_up:
+                            catch_up = False
+                            log.info(i18n.get_T()["lm_catch_up_done"], self.path)
+                        try:
+                            cur = os.stat(self.path)
+                            if cur.st_ino != self._inode:
+                                log.info(i18n.get_T()["lm_rotated"], self.path)
+                                rotated = True
+                                break
+                            if cur.st_size < self._pos:
+                                log.info(i18n.get_T()["lm_truncated"], self.path)
+                                rotated = True
+                                break
+                        except OSError:
+                            rotated = True
+                            break
+                        time.sleep(self.poll_interval)
+                        continue
+                    self._pos += len(raw)
+                    if len(self._head) < self.HEAD_BYTES:
+                        self._head += raw[: self.HEAD_BYTES - len(self._head)]
+                    self._consume(raw, self._pos, catch_up)
+            finally:
+                # Re-opening the same file (after an I/O error) resumes here;
+                # after rotation/truncation the next file is read from the start.
+                self._mem = None if rotated else {
+                    "inode": self._inode, "offset": self._pos,
+                    "head_len": len(self._head), "head": head_hash(self._head),
+                }
+
+    # -- start position / catch-up -------------------------------------
+
+    def _start_position(self, fh, st) -> tuple:
+        """Return (offset, catch_up) for a freshly opened file."""
+        startup = not self._opened
+        entry = self._mem
+        if entry is None and startup and self.offsets is not None:
+            entry = self.offsets.get(self.path)
+
+        if entry is None:
+            return (st.st_size if startup else 0), False
+
+        if st.st_ino == entry["inode"]:
+            if st.st_size < entry["offset"]:
+                log.info(i18n.get_T()["lm_truncated"], self.path)
+                return 0, startup
+            if self._head_matches(fh, entry):
+                return self._cap(fh, entry["offset"], st.st_size), startup
+            log.info(i18n.get_T()["lm_replaced"], self.path)
+            return 0, startup
+
+        # Different inode: the file we were reading was rotated away.
+        if startup:
+            self._drain_rotated(entry)
+            log.info(i18n.get_T()["lm_rotated"], self.path)
+        return 0, startup
+
+    def _cap(self, fh, offset: int, size: int) -> int:
+        """Skip ahead if the backlog is larger than catch_up_max_bytes."""
+        if size - offset <= self.catch_up_max_bytes:
+            return offset
+        start = size - self.catch_up_max_bytes
+        fh.seek(start)
+        fh.readline()  # drop the partial line
+        pos = fh.tell()
+        log.warning(i18n.get_T()["lm_catch_up_cap"], self.path, pos - offset)
+        return pos
+
+    @staticmethod
+    def _head_matches(fh, entry: dict) -> bool:
+        fh.seek(0)
+        return head_hash(fh.read(entry["head_len"])) == entry["head"]
+
+    def _read_head(self, fh, pos: int) -> bytes:
+        fh.seek(0)
+        return fh.read(min(pos, self.HEAD_BYTES))
+
+    def _rotated_candidates(self) -> List[str]:
+        directory = os.path.dirname(os.path.abspath(self.path))
+        base = os.path.basename(self.path)
+        found = []
+        try:
+            for name in os.listdir(directory):
+                if name != base and name.startswith((base + ".", base + "-")) \
+                        and not name.endswith(self._COMPRESSED):
+                    full = os.path.join(directory, name)
+                    try:
+                        found.append((os.stat(full).st_mtime, full))
+                    except OSError:
+                        continue
+        except OSError:
+            return []
+        return [p for _, p in sorted(found, reverse=True)[:8]]
+
+    def _drain_rotated(self, entry: dict) -> None:
+        """Process the unread tail of the file that was rotated while we were down."""
+        for cand in self._rotated_candidates():
+            try:
+                st = os.stat(cand)
+                if st.st_ino != entry["inode"] or st.st_size < entry["offset"]:
+                    continue
+                with open(cand, "rb") as rf:
+                    if not self._head_matches(rf, entry):
+                        continue
+                    pos = self._cap(rf, entry["offset"], st.st_size)
+                    rf.seek(pos)
+                    log.info(i18n.get_T()["lm_catch_up"], cand, st.st_size - pos)
+                    for raw in iter(rf.readline, b""):
+                        self._consume(raw, None, True)
+                return
+            except OSError as exc:
+                log.debug("rotated file %s unreadable: %s", cand, exc)
+
+    # -- line handling ---------------------------------------------------
+
+    def _consume(self, raw: bytes, new_pos: Optional[int], catch_up: bool) -> None:
+        line = raw.decode("utf-8", errors="replace")
+        with self._guard:
+            alert = self._evaluate(line, catch_up)
+            if new_pos is not None and self.offsets is not None:
+                self.offsets.update(self.path, self._inode, new_pos, self._head)
+        self._emit(alert, catch_up)
+
     def _process_line(self, line: str) -> None:
+        self._emit(self._evaluate(line, False), False)
+
+    def _evaluate(self, line: str, catch_up: bool) -> Optional[AlertEvent]:
         from utils.ip_utils import ip_in_list
         try:
             event = self.parser.parse_line(line)
         except Exception as exc:
             log.debug(i18n.get_T()["lm_parse_err"], exc)
-            return
+            return None
 
         if event is None:
-            return
+            return None
 
         if self.whitelist_nets and ip_in_list(event.ip, self.whitelist_nets):
-            return
+            return None
 
         if event.event_type == "FAILED":
-            alert = self.tracker.record_failed(
+            kwargs = {"use_event_time": True} if catch_up else {}
+            return self.tracker.record_failed(
+                ip=event.ip, username=event.username,
+                attack_type=event.attack_type, log_source=self.path,
+                timestamp=event.timestamp or None, **kwargs,
+            )
+        if event.event_type == "SUCCESS":
+            return self.tracker.record_success(
                 ip=event.ip, username=event.username,
                 attack_type=event.attack_type, log_source=self.path,
                 timestamp=event.timestamp or None,
             )
-        elif event.event_type == "SUCCESS":
-            alert = self.tracker.record_success(
-                ip=event.ip, username=event.username,
-                attack_type=event.attack_type, log_source=self.path,
-                timestamp=event.timestamp or None,
-            )
-        else:
-            return
+        return None
 
-        if alert:
-            try:
-                self.on_alert(alert)
-            except Exception as exc:
-                log.error(i18n.get_T()["lm_alert_err"], exc)
+    def _emit(self, alert: Optional[AlertEvent], catch_up: bool) -> None:
+        if not alert:
+            return
+        alert.catch_up = catch_up
+        try:
+            self.on_alert(alert)
+        except Exception as exc:
+            log.error(i18n.get_T()["lm_alert_err"], exc)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -364,9 +522,17 @@ class JournaldWatcher(threading.Thread):
 
 class LogMonitor:
 
-    def __init__(self, tracker: BruteForceTracker, whitelist_nets: Optional[list] = None) -> None:
+    def __init__(
+        self,
+        tracker: BruteForceTracker,
+        whitelist_nets: Optional[list] = None,
+        offsets: Optional[OffsetStore] = None,
+        catch_up_max_bytes: int = 64 * 1024 * 1024,
+    ) -> None:
         self.tracker = tracker
         self.whitelist_nets = whitelist_nets or []
+        self.offsets = offsets
+        self.catch_up_max_bytes = catch_up_max_bytes
         self._watchers: List[LogFileWatcher] = []
         self._handlers: List[Callable] = []
 
@@ -380,6 +546,7 @@ class LogMonitor:
             path=path, parser_type=parser_type,
             tracker=self.tracker, on_alert=self._dispatch,
             whitelist_nets=self.whitelist_nets,
+            offsets=self.offsets, catch_up_max_bytes=self.catch_up_max_bytes,
         ))
 
     def add_syslog_source(

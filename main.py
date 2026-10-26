@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-BRUTU$ v1.8.0
+BRUTU$ v1.9.0
 =============
 Real-time SSH/RDP brute-force attack detector.
 
@@ -30,6 +30,7 @@ from typing import Optional
 import yaml
 
 from detector.tracker import BruteForceTracker, AlertEvent
+from detector.offsets import OffsetStore
 from detector.state import StatePersister, load_state
 from detector.log_monitor import LogMonitor
 from detector.report_manager import ReportManager
@@ -42,7 +43,7 @@ from utils.blocker import IPBlocker
 from utils.ip_utils import parse_cidr_list
 from utils.threat_intel import ThreatIntel
 
-VERSION = "1.8.0"
+VERSION = "1.9.0"
 DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "config.yaml")
 
 log = logging.getLogger("brute-force-detector")
@@ -177,6 +178,10 @@ class AlertDispatcher:
         # Active defense — block attacker unless whitelisted
         # When ti_action=alert_only and IP is in threat intel, skip the block
         skip_block = ti_matched and self.ti_action == "alert_only"
+        if event.catch_up:
+            # The attack may be long over (the log was written while we were down)
+            skip_block = True
+            log.info("Catch-up alert for %s: alert sent, IP not blocked", event.ip)
         if self.blocker and not skip_block and not ip_in_list(event.ip, self.whitelist_nets):
             self.blocker.block(
                 ip=event.ip,
@@ -533,11 +538,14 @@ def main() -> int:
     state_cfg = cfg.get("state") or {}
     state_path = state_cfg.get("path", "reports/tracker_state.json")
     persister: Optional[StatePersister] = None
+    offsets: Optional[OffsetStore] = None
     if state_cfg.get("enabled", True):
-        restored = load_state(tracker, state_path)
+        if state_cfg.get("catch_up", True):
+            offsets = OffsetStore()
+        restored = load_state(tracker, state_path, offsets)
         if restored:
             logger.info(T["state_restored"], restored, state_path)
-        persister = StatePersister(tracker, state_path, state_cfg.get("save_interval", 30))
+        persister = StatePersister(tracker, state_path, state_cfg.get("save_interval", 30), offsets=offsets)
 
     if args.stats:
         print_stats(tracker, T)
@@ -548,7 +556,10 @@ def main() -> int:
         return 0
 
     # ── Log monitor ───────────────────────────────────────────────────────────
-    monitor = LogMonitor(tracker=tracker, whitelist_nets=whitelist)
+    monitor = LogMonitor(
+        tracker=tracker, whitelist_nets=whitelist, offsets=offsets,
+        catch_up_max_bytes=int(state_cfg.get("catch_up_max_mb", 64)) * 1024 * 1024,
+    )
     monitor.add_alert_handler(dispatcher.dispatch)
 
     log_files = [f for f in cfg.get("log_files", []) if f.get("enabled", True)]
