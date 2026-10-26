@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-BRUTU$ v1.6.1
+BRUTU$ v1.7.0
 =============
 Real-time SSH/RDP brute-force attack detector.
 
@@ -41,7 +41,7 @@ from utils.blocker import IPBlocker
 from utils.ip_utils import parse_cidr_list
 from utils.threat_intel import ThreatIntel
 
-VERSION = "1.6.1"
+VERSION = "1.7.0"
 DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "config.yaml")
 
 log = logging.getLogger("brute-force-detector")
@@ -203,7 +203,8 @@ def print_blocked(blocker: IPBlocker, T: dict) -> None:
         if r["geo"]:
             geo = ", ".join(str(r["geo"][k]) for k in ("country", "city") if r["geo"].get(k) and r["geo"][k] not in ("", "unknown"))
         users = ", ".join(r["usernames"][:4]) or "—"
-        print(f"{r['ip']:<20} {r['attack_type']:<18} {r['attempts']:>9}  {ts:<20}  {rem:>10}  {users}")
+        scope = ",".join(map(str, r["ports"])) if r.get("ports") else "all"
+        print(f"{r['ip']:<20} {r['attack_type']:<18} {r['attempts']:>9}  {ts:<20}  {rem:>10}  {users}  [ports: {scope}]")
     print()
 
 
@@ -450,12 +451,20 @@ def main() -> int:
         logger.info(T["reports_info"], r_cfg.get("output_path", "reports/alerts.jsonl"))
 
     blk_cfg = cfg.get("blocker", {})
-    blocker = IPBlocker(
-        enabled=blk_cfg.get("enabled", False),
-        auto_unblock_after=blk_cfg.get("auto_unblock_after", 3600),
-        state_file=blk_cfg.get("state_file", "reports/blocked_ips.json"),
-        dry_run=blk_cfg.get("dry_run", False),
-    )
+    try:
+        blocker = IPBlocker(
+            enabled=blk_cfg.get("enabled", False),
+            auto_unblock_after=blk_cfg.get("auto_unblock_after", 3600),
+            state_file=blk_cfg.get("state_file", "reports/blocked_ips.json"),
+            dry_run=blk_cfg.get("dry_run", False),
+            scope=blk_cfg.get("scope", "all"),
+            ports=blk_cfg.get("ports"),
+            protected_nets=parse_cidr_list(blk_cfg.get("trusted_proxies") or []),
+            protect_private=blk_cfg.get("protect_private", False),
+        )
+    except (ValueError, TypeError) as exc:
+        print(f"[ERROR] blocker config: {exc}", file=sys.stderr)
+        return 1
     if blk_cfg.get("enabled"):
         if blk_cfg.get("dry_run"):
             logger.info(T["blk_dry"])

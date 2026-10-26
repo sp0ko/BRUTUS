@@ -82,6 +82,12 @@ blocker:
   auto_unblock_after: 3600    # seconds; 0 = permanent until restart
   state_file: reports/blocked_ips.json
   dry_run: false              # true = log only, no real iptables rules
+  scope: all                  # all = drop every packet from the IP; service = only the attacked service's ports
+  # ports used when scope: service (attack type -> TCP ports; PASSWORD_SPRAY / unknown = full block)
+  # ports: {SSH: [22], RDP: [3389], HTTP: [80, 443], FTP: [21], MYSQL: [3306]}
+  trusted_proxies: []         # never blocked, e.g. your reverse proxy / CDN: ["10.0.0.5", "172.16.0.0/12"]
+  protect_private: false      # true = never block private ranges (10/8, 172.16/12, 192.168/16, fc00::/7)
+  # Always protected: loopback, link-local, multicast and this host's own addresses
 
 whitelist:
   - "127.0.0.1"

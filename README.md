@@ -10,10 +10,18 @@
  ██████╔╝██████╔╝██║   ██║   ██║   ██║   ██║███████╗
  ██╔══██╗██╔══██╗██║   ██║   ██║   ██║   ██║╚════██║
  ██████╔╝██║  ██║╚██████╔╝   ██║   ╚██████╔╝███████║
- ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.6.1
+ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.7.0
 ```
 
 ---
+
+## What's new in v1.7.0
+
+| | |
+|---|---|
+| 🎯 **Per-service blocking** | `blocker.scope: service` drops only the attacked service's ports (configurable `ports`) instead of the whole IP |
+| 🔒 **Self-lockout protection** | Loopback, link-local, this host's own addresses, `trusted_proxies` and (optionally) private ranges are never blocked |
+| 📋 **`--blocked`** | Shows the blocked ports per IP |
 
 ## What's new in v1.6.1
 
@@ -255,6 +263,9 @@ blocker:
   auto_unblock_after: 3600  # seconds before automatic unblock; 0 = permanent
   state_file: reports/blocked_ips.json
   dry_run: false          # set true to log without touching iptables
+  scope: all              # all | service  (see below)
+  trusted_proxies: []     # never blocked: ["10.0.0.5", "172.16.0.0/12"]
+  protect_private: false  # true = never block 10/8, 172.16/12, 192.168/16, fc00::/7
 ```
 
 ```bash
@@ -266,6 +277,30 @@ python main.py --blocked
 ```
 
 IPv6 addresses are handled via `ip6tables` automatically.
+
+### Block only the attacked service (`scope: service`)
+
+By default a block drops **all** traffic from the attacker. With `scope: service` only the TCP ports of the attacked service are dropped, so a false positive on a web login form or an FTP burst doesn't cut the IP off from everything else:
+
+```yaml
+blocker:
+  scope: service
+  ports:                       # defaults shown; override e.g. a non-standard SSH port
+    SSH: [22]
+    RDP: [3389]
+    HTTP: [80, 443]
+    FTP: [21]
+    MYSQL: [3306]
+```
+
+- An IP that later attacks a second service gets those ports added (`SSH, FTP` → ports 21 and 22).
+- `PASSWORD_SPRAY` and any type without a port mapping get a **full** block (the attacker is clearly hostile), replacing the port rules.
+- FTP data connections (passive ports) are not covered by the port rule; the login port is.
+- `python main.py --blocked` shows the blocked ports for each IP. State files from older versions are read as full blocks.
+
+### Never lock yourself out
+
+These addresses are never blocked (a warning is logged, the alert is still sent): loopback, link-local, multicast, **this host's own addresses**, everything in `blocker.trusted_proxies`, and — with `protect_private: true` — all private ranges. Use `trusted_proxies` for your reverse proxy / CDN: behind one, HTTP logs contain the proxy's address, and blocking it would take the whole site down. (`whitelist` is stricter: whitelisted IPs are ignored entirely — no alerts, no blocks. `trusted_proxies` only protects from blocking and still alerts.) Private ranges are *not* protected by default so LAN-based tests still work; turn `protect_private` on for production servers.
 
 ---
 
