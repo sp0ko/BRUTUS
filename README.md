@@ -10,10 +10,16 @@
  ██████╔╝██████╔╝██║   ██║   ██║   ██║   ██║███████╗
  ██╔══██╗██╔══██╗██║   ██║   ██║   ██║   ██║╚════██║
  ██████╔╝██║  ██║╚██████╔╝   ██║   ╚██████╔╝███████║
- ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.3.0
+ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.3.1
 ```
 
 ---
+
+## What's new in v1.3.1
+
+| | |
+|---|---|
+| 🤖 **Feodo Tracker feed** | Added Abuse.ch Feodo Tracker (botnet C2 IPs) to the built-in threat intel sources and the default `config.yaml` list |
 
 ## What's new in v1.3.0
 
@@ -21,7 +27,7 @@
 |---|---|
 | 🎯 **Configurable TI action** | `action_on_threat_intel_match: block \| alert_only` — decide whether a threat intel match triggers a block or just an alert |
 | 📋 **Custom source list** | `threat_intel.sources` now accepts a plain URL list in `config.yaml` — swap feeds without touching code |
-| 🔄 **7 configured feeds** | Includes **Feodo Tracker** botnet C2 IPs and **blocklist.de SSH**, alongside Spamhaus / Firehol / CINS / Emerging Threats |
+| 🔄 **Extra feed** | Added **blocklist.de SSH** feed to the configurable source list |
 
 ---
 
