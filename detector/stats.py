@@ -172,6 +172,7 @@ def summarize(
         },
         "attack_types": ranked(attack_types),
         "top_ips": top_ips,
+        "breached_ips": sorted(e["ip"] for e in ips.values() if e["breach"]),
         "countries": ranked(countries),
         "usernames": ranked(usernames),
         "sources": ranked(sources),

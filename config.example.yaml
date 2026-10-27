@@ -75,7 +75,10 @@ geo:
   enabled: true
   cache_ttl: 3600
   timeout: 5
-  # mmdb_path: /path/to/GeoLite2-City.mmdb   # offline mode (requires: pip install geoip2)
+  # Offline lookups: run `python3 main.py --geoip-download` (free DB-IP database -> data/geoip.mmdb,
+  # picked up automatically). Or point to your own GeoLite2/DB-IP file:
+  # mmdb_path: /path/to/GeoLite2-City.mmdb
+  online_fallback: true        # false = never query ip-api.com (plain HTTP); offline database only
 
 blocker:
   enabled: false              # requires root / sudo

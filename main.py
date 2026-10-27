@@ -327,6 +327,7 @@ def build_arg_parser(T: dict) -> argparse.ArgumentParser:
     p.add_argument("--blocked",     action="store_true",    help=T["help_blocked"])
     p.add_argument("--update-threat-db", action="store_true", help=T["help_update_ti"])
     p.add_argument("--lang",        choices=["pl", "en"],   help=T["help_lang"])
+    p.add_argument("--geoip-download", action="store_true", help=T["help_geoip_download"])
     p.add_argument("--geoip-db",    metavar="FILE",          help=T["help_geoip_db"])
     p.add_argument("--replay",      metavar="FILE",          help=T["help_replay"])
     p.add_argument("--report",      action="store_true",    help=T["help_report"])
@@ -392,6 +393,17 @@ def main() -> int:
         from detector.setup_wizard import run_setup
         return run_setup(args.config, T)
 
+    if args.geoip_download:
+        from utils.geo import DEFAULT_MMDB, download_db
+        print(T["geo_downloading"] % DEFAULT_MMDB)
+        try:
+            download_db(DEFAULT_MMDB)
+        except Exception as exc:
+            print(T["geo_download_fail"] % exc, file=sys.stderr)
+            return 1
+        print(T["geo_download_ok"] % DEFAULT_MMDB)
+        return 0
+
     if not os.path.exists(args.config):
         print(T["err_config"] % args.config, file=sys.stderr)
         print(T["err_config_hint"], file=sys.stderr)
@@ -424,6 +436,7 @@ def main() -> int:
         cache_ttl=geo_cfg.get("cache_ttl", 3600),
         timeout=geo_cfg.get("timeout", 5),
         mmdb_path=geo_cfg.get("mmdb_path"),
+        online_fallback=geo_cfg.get("online_fallback", True),
     )
 
     console_alert = ConsoleAlert()

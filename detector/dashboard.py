@@ -39,6 +39,7 @@ main{padding:20px 24px;max-width:1200px;margin:0 auto}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px}
 .panel{background:#161c24;border:1px solid #263040;border-radius:10px;padding:14px;overflow:hidden}
 .panel.wide{grid-column:1/-1}
+.panel.breach{border-color:#ff5d5d;background:#2a1517;margin-bottom:14px}.panel.breach h2{color:#ff5d5d}
 .row{display:grid;grid-template-columns:minmax(80px,40%) 1fr 48px;gap:8px;align-items:center;margin:4px 0}
 .lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .track{background:#0f1419;border-radius:4px;height:10px}.fill{background:#4a90e2;height:10px;border-radius:4px;display:block}
@@ -183,13 +184,22 @@ def render_html(summary: dict, T: dict, period: str = "7d", refresh: Optional[in
         f'<section class="panel {cls}"><h2>{escape(title)}</h2>{body}</section>' for cls, title, body in panels
     )
 
+    breached = summary.get("breached_ips", [])
+    breach_banner = ""
+    if breached:
+        ips = ", ".join(f"<code>{escape(ip)}</code>" for ip in breached)
+        breach_banner = (
+            f'<section class="panel breach"><h2>{escape(T["dash_breach_title"])}</h2>'
+            f'<p>{escape(T["dash_breach_text"])} {ips}</p></section>'
+        )
+
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
         f'{meta_refresh}<title>BRUTU$ — {escape(T["rp_title"])}</title><style>{_CSS}</style></head><body>'
         f'<header><div><h1>BRUTU<span>$</span> — {escape(T["rp_title"])}</h1>'
         f'<div class="sub">{escape(period_txt)}</div></div>{nav}</header>'
-        f'<main>{_render_status(status, T)}<div class="cards">{cards}</div>'
+        f'<main>{breach_banner}{_render_status(status, T)}<div class="cards">{cards}</div>'
         f'<div class="grid">{panel_html}</div></main></body></html>'
     )
 

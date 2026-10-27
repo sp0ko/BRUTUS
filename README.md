@@ -19,6 +19,8 @@
 
 | | |
 |---|---|
+| 🌍 **Offline GeoIP** | `--geoip-download`, automatic use of `data/geoip.mmdb`, `geo.online_fallback`, `--check` hint |
+| 🚨 **Breach banner** | The dashboard highlights IPs that logged in successfully after failed attempts |
 | 📡 **Live source status** | The dashboard shows what BRUTU$ monitors right now (running / waiting / error, last event) — also at `/api/status`; `--dashboard` runs detector and dashboard together |
 | 🧙 **`--setup`** | Interactive config wizard: detects log sources, validates webhooks and whitelist, backs up the old config |
 | 🩺 **`--check`** | Environment diagnostics (Python, packages, logs, ports, iptables, webhooks); exit code 1 on failure |
@@ -131,7 +133,7 @@
 | | |
 |---|---|
 | 📴 **GeoIP offline** | Country, city, ISP from local **GeoLite2-City.mmdb** — no internet, no API key |
-| 🌐 **GeoIP online** | Falls back to [ip-api.com](http://ip-api.com) when no local DB is configured |
+| 🌐 **GeoIP** | `python3 main.py --geoip-download` fetches a free offline database (DB-IP, `data/geoip.mmdb`, used automatically). Without it BRUTU$ falls back to [ip-api.com](http://ip-api.com) over plain HTTP (set `geo.online_fallback: false` to forbid that) |
 
 ### 📢 Alerting & reporting
 | | |
@@ -274,6 +276,7 @@ python main.py [options]
   --dashboard-port N    Dashboard port (default 8080)
   --blocked             Show blocked IPs report and exit
   --update-threat-db    Download/update IP reputation DB and exit
+  --geoip-download      Download the free GeoIP database to data/geoip.mmdb and exit
   --geoip-db PATH       Path to GeoLite2-City.mmdb for offline geolocation
   --version             Show version
 ```

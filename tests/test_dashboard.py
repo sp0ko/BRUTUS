@@ -94,3 +94,23 @@ class TestDashboard(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestBreachBanner(unittest.TestCase):
+    def _summary(self, breached):
+        return {
+            "since": None, "until": "2026-10-27T08:00:00",
+            "totals": {"alerts": 1, "unique_ips": 1, "breaches": len(breached), "spray": 0, "threat_intel": 0},
+            "timeline": {"granularity": "hour", "buckets": []}, "top_ips": [],
+            "attack_types": [], "countries": [], "usernames": [], "sources": [], "ti_sources": [],
+            "breached_ips": breached,
+        }
+
+    def test_banner_lists_breached_ips_escaped(self):
+        html = render_html(self._summary(["9.9.9.9", XSS]), i18n.get_T())
+        self.assertIn("panel breach", html)
+        self.assertIn("9.9.9.9", html)
+        self.assertNotIn(XSS, html)
+
+    def test_no_banner_without_breach(self):
+        self.assertNotIn("panel breach", render_html(self._summary([]), i18n.get_T()))

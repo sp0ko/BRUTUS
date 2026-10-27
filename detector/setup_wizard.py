@@ -18,6 +18,8 @@ from typing import Callable, List, Optional, Tuple
 
 import yaml
 
+from utils.geo import DEFAULT_MMDB
+
 from .parsers import PARSER_REGISTRY
 
 OK, WARN, FAIL = "OK", "WARN", "FAIL"
@@ -259,6 +261,8 @@ def check_config(cfg: dict, is_root: Optional[bool] = None,
     mmdb = (cfg.get("geo") or {}).get("mmdb_path")
     if mmdb and not os.path.exists(mmdb):
         add((WARN, "ck_geo_missing", (mmdb,)))
+    elif not mmdb and (cfg.get("geo") or {}).get("enabled", True) and not os.path.exists(DEFAULT_MMDB):
+        add((WARN, "ck_geo_offline", ()))
 
     reports = cfg.get("reports") or {}
     if reports.get("save_to_file", True):

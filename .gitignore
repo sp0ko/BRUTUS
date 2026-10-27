@@ -38,3 +38,6 @@ config.yaml
 # Systemy operacyjne
 .DS_Store
 Thumbs.db
+
+# Pobrana baza GeoIP
+data/

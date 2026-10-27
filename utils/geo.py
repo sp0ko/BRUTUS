@@ -8,11 +8,15 @@ Download a free GeoLite2-City database from https://dev.maxmind.com/geoip/geolit
 and pass the path via --geoip-db or the ``mmdb_path`` config key.
 """
 
+import datetime
+import gzip
 import logging
 import os
+import shutil
+import tempfile
 import time
 import threading
-from typing import Optional
+from typing import Callable, Optional
 
 import requests
 
@@ -24,6 +28,10 @@ except ImportError:
     _HAS_GEOIP2 = False
 
 log = logging.getLogger("brute-force-detector.geo")
+
+DEFAULT_MMDB = os.path.join("data", "geoip.mmdb")
+# Free DB-IP "IP to City Lite" (CC BY 4.0, no account needed), MaxMind-compatible format.
+_DBIP_URL = "https://download.db-ip.com/free/dbip-city-lite-{ym}.mmdb.gz"
 
 _SINGLE_URL = "http://ip-api.com/json/{ip}?fields=status,message,country,regionName,city,isp,org,as,query"
 _PRIVATE_PREFIXES = (
@@ -42,6 +50,7 @@ class GeoLocator:
         cache_ttl: int = 3600,
         timeout: int = 5,
         mmdb_path: Optional[str] = None,
+        online_fallback: bool = True,
     ) -> None:
         self.enabled = enabled
         self._cache_ttl = cache_ttl
@@ -50,6 +59,9 @@ class GeoLocator:
         self._req_times: list = []
         self._lock = threading.Lock()
         self._reader = None
+        self._online_fallback = online_fallback
+        if not mmdb_path and os.path.isfile(DEFAULT_MMDB):
+            mmdb_path = DEFAULT_MMDB
         if mmdb_path:
             self._load_mmdb(mmdb_path)
 
@@ -69,7 +81,7 @@ class GeoLocator:
                 return cached[1]
 
         result = self._lookup_offline(ip) if self._reader is not None else None
-        if result is None:
+        if result is None and self._online_fallback:
             result = self._lookup_online(ip)
 
         if result:
@@ -120,6 +132,7 @@ class GeoLocator:
             return None
 
     def _lookup_online(self, ip: str) -> Optional[dict]:
+        # ip-api.com free tier is HTTP only: the looked-up IP leaves this host unencrypted.
         if not self._rate_ok():
             return None
         try:
@@ -144,3 +157,30 @@ class GeoLocator:
                 return False
             self._req_times.append(now)
         return True
+
+
+def download_db(dest: str = DEFAULT_MMDB, get: Callable = requests.get,
+                today: Optional[datetime.date] = None) -> str:
+    """Download the free DB-IP City Lite database to ``dest``; returns the URL used."""
+    today = today or datetime.date.today()
+    first_of_month = today.replace(day=1)
+    months = [first_of_month, (first_of_month - datetime.timedelta(days=1)).replace(day=1)]
+    last_error: Exception = RuntimeError("no download attempted")
+    for month in months:
+        url = _DBIP_URL.format(ym=month.strftime("%Y-%m"))
+        try:
+            resp = get(url, stream=True, timeout=60)
+            resp.raise_for_status()
+            os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
+            fd, tmp = tempfile.mkstemp(dir=os.path.dirname(dest) or ".", suffix=".part")
+            try:
+                with os.fdopen(fd, "wb") as out, gzip.GzipFile(fileobj=resp.raw) as gz:
+                    shutil.copyfileobj(gz, out)
+                os.replace(tmp, dest)
+            finally:
+                if os.path.exists(tmp):
+                    os.unlink(tmp)
+            return url
+        except Exception as exc:
+            last_error = exc
+    raise RuntimeError(str(last_error))

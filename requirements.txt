@@ -1,6 +1,7 @@
 requests>=2.31.0
 pyyaml>=6.0
 colorama>=0.4.6
+geoip2>=4.8.0   # offline GeoIP (see: main.py --geoip-download)
 
 # Windows EVTX file parsing (cross-platform, optional)
 # python-evtx>=0.7.4
