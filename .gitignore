@@ -28,6 +28,8 @@ htmlcov/
 # Logi i raporty (NIE commituj prawdziwych logów!)
 reports/*.jsonl
 reports/tracker_state.json
+reports/blocked_ips.json
+reports/threat_intel.txt
 logs/
 
 # WAŻNE: config.yaml może zawierać webhooks/tokeny — nie trafia na GitHub
