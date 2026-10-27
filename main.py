@@ -369,25 +369,6 @@ def run_report(path: str, args: argparse.Namespace, T: dict) -> int:
     return 0
 
 
-def run_dashboard(path: str, args: argparse.Namespace, T: dict) -> int:
-    from detector.dashboard import create_server, is_loopback
-    try:
-        server = create_server(path, args.dashboard_host, args.dashboard_port)
-    except OSError as exc:
-        print(T["dash_err"] % exc, file=sys.stderr)
-        return 1
-    if not is_loopback(args.dashboard_host):
-        print(T["dash_exposed"] % args.dashboard_host, file=sys.stderr)
-    print(T["dash_started"] % (args.dashboard_host, server.server_address[1]))
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        server.server_close()
-    return 0
-
-
 # ──────────────────────────────────────────────────────────────────────────────
 
 def main() -> int:
@@ -529,9 +510,6 @@ def main() -> int:
     if args.report:
         return run_report(report_path, args, T)
 
-    if args.dashboard:
-        return run_dashboard(report_path, args, T)
-
     if args.replay:
         return run_replay(args.replay, cfg, args, T, threat_intel)
 
@@ -591,9 +569,32 @@ def main() -> int:
     else:
         logger.info(T["journald_disabled"])
 
+    dashboard_server = None
+    dashboard_thread = None
+    if args.dashboard:
+        from detector.dashboard import create_server, is_loopback
+        try:
+            dashboard_server = create_server(
+                report_path, args.dashboard_host, args.dashboard_port,
+                status_provider=monitor.get_status,
+            )
+        except OSError as exc:
+            print(T["dash_err"] % exc, file=sys.stderr)
+            return 1
+        if not is_loopback(args.dashboard_host):
+            print(T["dash_exposed"] % args.dashboard_host, file=sys.stderr)
+
     monitor.start()
     if persister:
         persister.start()
+    if dashboard_server:
+        dashboard_thread = threading.Thread(
+            target=dashboard_server.serve_forever, daemon=True, name="dashboard",
+        )
+        dashboard_thread.start()
+        logger.info(T["dash_started"] % (
+            args.dashboard_host, dashboard_server.server_address[1],
+        ))
 
     stop_event = threading.Event()
 
@@ -618,6 +619,11 @@ def main() -> int:
                             len(stats), top_ip, stats[top_ip]["count"])
     finally:
         monitor.stop()
+        if dashboard_server:
+            dashboard_server.shutdown()
+            dashboard_server.server_close()
+        if dashboard_thread:
+            dashboard_thread.join(timeout=3)
         if persister:
             persister.stop()
         if blocker.enabled:

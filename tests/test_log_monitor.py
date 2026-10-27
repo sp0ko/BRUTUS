@@ -74,6 +74,20 @@ class TestLogFileWatcher(unittest.TestCase):
         self.watcher.join(timeout=5)
         self.assertFalse(self.watcher.is_alive())
 
+    def test_watcher_status_tracks_running_and_recognized_events(self):
+        status = self.watcher.get_status()
+        self.assertEqual(status["status"], "running")
+        self.assertEqual(status["type"], "file")
+        self.assertEqual(status["parser"], "linux_ssh")
+        self.assertIsNone(status["last_event_at"])
+
+        self._append(_failed_line("192.0.2.77"))
+        for _ in range(50):
+            if self.watcher.get_status()["last_event_at"]:
+                break
+            time.sleep(0.02)
+        self.assertIsNotNone(self.watcher.get_status()["last_event_at"])
+
 
 class TestLogFileWatcherMissingFile(unittest.TestCase):
 

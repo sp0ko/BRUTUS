@@ -24,7 +24,15 @@ class TestDashboard(unittest.TestCase):
                 "timestamp": datetime.utcnow().isoformat() + "Z", "ip": "1.2.3.4", "count": 5,
                 "attack_type": "SSH", "usernames": [XSS], "log_sources": ["auth.log"],
                 "successful_login": False, "geo": None}) + "\n")
-        self.server = create_server(self.path, "127.0.0.1", 0)
+        self.status = {
+            "running": True,
+            "started_at": "2026-10-27T08:00:00+00:00",
+            "sources": [{
+                "type": "file", "name": "/var/log/auth.log", "parser": "linux_ssh",
+                "status": "running", "last_event_at": None, "error": None,
+            }],
+        }
+        self.server = create_server(self.path, "127.0.0.1", 0, status_provider=lambda: self.status)
         self.port = self.server.server_address[1]
         t = threading.Thread(target=self.server.serve_forever, daemon=True)
         t.start()
@@ -51,6 +59,19 @@ class TestDashboard(unittest.TestCase):
         status, _, body = self.get("/api/summary?since=all")
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(body)["totals"]["alerts"], 1)
+
+    def test_status_api_and_dashboard_panel(self):
+        status, _, body = self.get("/api/status")
+        self.assertEqual(status, 200)
+        data = json.loads(body)
+        self.assertTrue(data["running"])
+        self.assertEqual(data["sources"][0]["status"], "running")
+
+        status, _, body = self.get("/")
+        self.assertEqual(status, 200)
+        self.assertIn("Current BRUTUS status", body)
+        self.assertIn("/var/log/auth.log", body)
+        self.assertIn("no events yet", body)
 
     def test_bad_period_and_404(self):
         self.assertEqual(self.get("/?since=bogus")[0], 400)

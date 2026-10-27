@@ -12,6 +12,7 @@ import subprocess
 import time
 import threading
 import logging
+from datetime import datetime, timezone
 from typing import List, Callable, Optional
 
 import utils.i18n as i18n
@@ -22,7 +23,43 @@ from .parsers import get_parser, PARSER_REGISTRY
 log = logging.getLogger("brute-force-detector.monitor")
 
 
-class LogFileWatcher(threading.Thread):
+class _WatcherStatus:
+    def _init_status(self, source_type: str, name: str, parser: str) -> None:
+        self.source_type = source_type
+        self.source_name = name
+        self.parser_name = parser
+        self._status = "starting"
+        self._last_event_at: Optional[str] = None
+        self._last_error: Optional[str] = None
+        self._status_lock = threading.Lock()
+
+    def _set_status(self, status: str, error: Optional[str] = None) -> None:
+        with self._status_lock:
+            self._status = status
+            self._last_error = error
+
+    def _record_event(self) -> None:
+        with self._status_lock:
+            self._last_event_at = datetime.now(timezone.utc).isoformat()
+
+    def get_status(self) -> dict:
+        with self._status_lock:
+            status = self._status
+            last_event_at = self._last_event_at
+            last_error = self._last_error
+        if not self.is_alive() and status not in ("starting", "stopped", "error"):
+            status = "stopped"
+        return {
+            "type": self.source_type,
+            "name": self.source_name,
+            "parser": self.parser_name,
+            "status": status,
+            "last_event_at": last_event_at,
+            "error": last_error,
+        }
+
+
+class LogFileWatcher(_WatcherStatus, threading.Thread):
     """
     Tails one log file (binary-safe, position-tracked).
 
@@ -52,6 +89,7 @@ class LogFileWatcher(threading.Thread):
         super().__init__(daemon=True, name=f"watcher:{os.path.basename(path)}")
         self.path = path
         self.parser = get_parser(parser_type)
+        self._init_status("file", path, self.parser.name)
         self.tracker = tracker
         self.on_alert = on_alert
         self.whitelist_nets = whitelist_nets or []
@@ -68,7 +106,10 @@ class LogFileWatcher(threading.Thread):
 
     def run(self) -> None:
         log.info(i18n.get_T()["lm_monitoring"], self.path, self.parser.name)
-        self._tail()
+        try:
+            self._tail()
+        finally:
+            self._set_status("stopped")
 
     def stop(self) -> None:
         self._stop_event.set()
@@ -78,12 +119,14 @@ class LogFileWatcher(threading.Thread):
     def _tail(self) -> None:
         while not self._stop_event.is_set():
             if not os.path.exists(self.path):
+                self._set_status("waiting")
                 log.warning(i18n.get_T()["lm_no_file"], self.path)
                 time.sleep(2)
                 continue
             try:
                 self._tail_once()
             except OSError as exc:
+                self._set_status("error", str(exc))
                 log.error(i18n.get_T()["lm_read_err"], self.path, exc)
                 time.sleep(2)
 
@@ -97,6 +140,7 @@ class LogFileWatcher(threading.Thread):
             self._head = self._read_head(fh, pos)
             fh.seek(pos)
             self._opened = True
+            self._set_status("running")
             log.info(i18n.get_T()["lm_ready"], self.path)
             if catch_up:
                 log.info(i18n.get_T()["lm_catch_up"], self.path, max(st.st_size - pos, 0))
@@ -246,6 +290,7 @@ class LogFileWatcher(threading.Thread):
 
         if self.whitelist_nets and ip_in_list(event.ip, self.whitelist_nets):
             return None
+        self._record_event()
 
         if event.event_type == "FAILED":
             kwargs = {"use_event_time": True} if catch_up else {}
@@ -276,7 +321,7 @@ class LogFileWatcher(threading.Thread):
 # Syslog server (UDP / TCP)
 # ──────────────────────────────────────────────────────────────────────────────
 
-class SyslogWatcher(threading.Thread):
+class SyslogWatcher(_WatcherStatus, threading.Thread):
     """
     Listens for syslog messages on UDP or TCP and feeds them through
     the same parser/tracker pipeline as LogFileWatcher.
@@ -306,6 +351,7 @@ class SyslogWatcher(threading.Thread):
         self.port          = port
         self.protocol      = protocol.lower()
         self.parser        = get_parser(parser_type)
+        self._init_status("syslog", f"{host}:{port}/{self.protocol.upper()}", self.parser.name)
         self.tracker       = tracker
         self.on_alert      = on_alert
         self.whitelist_nets = whitelist_nets or []
@@ -344,10 +390,12 @@ class SyslogWatcher(threading.Thread):
 
         try:
             self._server = _Server((self.host, self.port), _Handler)
+            self._set_status("running")
             log.info(i18n.get_T()["syslog_started"], self.host, self.port,
                      self.protocol.upper())
             self._server.serve_forever()
         except OSError as exc:
+            self._set_status("error", str(exc))
             log.error(i18n.get_T()["syslog_bind_err"], self.host, self.port, exc)
 
     def stop(self) -> None:
@@ -366,6 +414,7 @@ class SyslogWatcher(threading.Thread):
             return
         if self.whitelist_nets and ip_in_list(event.ip, self.whitelist_nets):
             return
+        self._record_event()
         if event.event_type == "FAILED":
             alert = self.tracker.record_failed(
                 ip=event.ip, username=event.username,
@@ -394,7 +443,7 @@ class SyslogWatcher(threading.Thread):
 DEFAULT_JOURNALD_UNITS = ["ssh", "sshd", "xrdp-sesman"]
 
 
-class JournaldWatcher(threading.Thread):
+class JournaldWatcher(_WatcherStatus, threading.Thread):
     """
     Follows the systemd journal (``journalctl -f``) and feeds the lines through
     the same parser/tracker pipeline as LogFileWatcher.
@@ -417,6 +466,7 @@ class JournaldWatcher(threading.Thread):
         super().__init__(daemon=True, name="journald")
         self.units          = list(units) if units else list(DEFAULT_JOURNALD_UNITS)
         self.parser         = get_parser(parser_type)
+        self._init_status("journald", ", ".join(self.units), self.parser.name)
         self.tracker        = tracker
         self.on_alert       = on_alert
         self.whitelist_nets = whitelist_nets or []
@@ -445,10 +495,13 @@ class JournaldWatcher(threading.Thread):
                     encoding="utf-8",
                     errors="replace",
                 )
+                self._set_status("running")
             except FileNotFoundError:
+                self._set_status("error", "journalctl not found")
                 log.error(i18n.get_T()["journald_missing"])
                 return
             except OSError as exc:
+                self._set_status("error", str(exc))
                 log.error(i18n.get_T()["journald_err"], exc)
                 return
 
@@ -465,8 +518,10 @@ class JournaldWatcher(threading.Thread):
 
             if self._stop_event.is_set():
                 break
+            self._set_status("waiting")
             log.warning(i18n.get_T()["journald_restart"], self.RESTART_DELAY)
             self._stop_event.wait(self.RESTART_DELAY)
+        self._set_status("stopped")
 
     def stop(self) -> None:
         self._stop_event.set()
@@ -497,6 +552,7 @@ class JournaldWatcher(threading.Thread):
             return
         if self.whitelist_nets and ip_in_list(event.ip, self.whitelist_nets):
             return
+        self._record_event()
         if event.event_type == "FAILED":
             alert = self.tracker.record_failed(
                 ip=event.ip, username=event.username,
@@ -535,6 +591,7 @@ class LogMonitor:
         self.catch_up_max_bytes = catch_up_max_bytes
         self._watchers: List[LogFileWatcher] = []
         self._handlers: List[Callable] = []
+        self._started_at: Optional[str] = None
 
     def add_alert_handler(self, handler: Callable[[AlertEvent], None]) -> None:
         self._handlers.append(handler)
@@ -577,6 +634,7 @@ class LogMonitor:
     def start(self) -> None:
         if not self._watchers:
             raise RuntimeError(i18n.get_T()["lm_no_files"])
+        self._started_at = datetime.now(timezone.utc).isoformat()
         for w in self._watchers:
             w.start()
         log.info(i18n.get_T()["lm_started"], len(self._watchers))
@@ -586,6 +644,13 @@ class LogMonitor:
             w.stop()
         for w in self._watchers:
             w.join(timeout=3)
+
+    def get_status(self) -> dict:
+        return {
+            "running": any(w.is_alive() for w in self._watchers),
+            "started_at": self._started_at,
+            "sources": [w.get_status() for w in self._watchers],
+        }
 
     def _dispatch(self, event: AlertEvent) -> None:
         for h in self._handlers:

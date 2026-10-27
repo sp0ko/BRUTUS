@@ -12,7 +12,7 @@ import logging
 from datetime import datetime
 from html import escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import List, Optional
+from typing import Callable, List, Optional
 from urllib.parse import parse_qs, urlparse
 
 import utils.i18n as i18n
@@ -47,6 +47,9 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:5px 8px;
 th{color:#8b98a9;font-weight:600}td.n,th.n{text-align:right}
 code{color:#9cdcfe}.tag{display:inline-block;padding:0 6px;border-radius:4px;font-size:11px;margin-left:4px}
 .tag.b{background:#5c1f1f;color:#ff9b9b}.tag.t{background:#4d3b12;color:#f5c26b}
+.status{margin-bottom:20px}.state{display:inline-block;padding:2px 8px;border-radius:999px;background:#263040}
+.state.running{color:#8be0a0;background:#173522}.state.error{color:#ff9b9b;background:#5c1f1f}
+.state.waiting,.state.starting{color:#f5c26b;background:#4d3b12}.error-text{color:#ff9b9b}
 svg{width:100%;height:auto;display:block}.bar{fill:#4a90e2}.bar:hover{fill:#7ab4f5}
 .axis{fill:#8b98a9;font-size:10px}.empty{color:#8b98a9;font-style:italic}
 """
@@ -104,8 +107,46 @@ def _ip_table(top_ips: List[dict], T: dict) -> str:
     return f"<table>{head}{''.join(body)}</table>"
 
 
+def _render_status(status: Optional[dict], T: dict) -> str:
+    if status is None:
+        return ""
+    running = bool(status.get("running"))
+    state = "running" if running else "stopped"
+    overall = T["dash_status_running"] if running else T["dash_status_stopped"]
+    started = status.get("started_at")
+    started_text = str(started).replace("T", " ") if started else T["dash_status_unknown"]
+    rows = []
+    for source in status.get("sources", []):
+        source_state = str(source.get("status", "unknown"))
+        label = T.get(f"dash_state_{source_state}", source_state)
+        last_event = source.get("last_event_at") or T["dash_status_never"]
+        error = source.get("error")
+        error_html = f'<div class="error-text">{escape(str(error))}</div>' if error else ""
+        rows.append(
+            f'<tr><td>{escape(str(source.get("type", "")))}</td>'
+            f'<td><code>{escape(str(source.get("name", "")))}</code></td>'
+            f'<td>{escape(str(source.get("parser", "")))}'
+            f'<div class="sub">{escape(T["dash_last_event"])}: {escape(str(last_event))}</div>'
+            f'{error_html}</td><td><span class="state {escape(source_state)}">{escape(label)}</span></td></tr>'
+        )
+    if rows:
+        source_table = (
+            f'<table><thead><tr><th>{escape(T["dash_source_type"])}</th>'
+            f'<th>{escape(T["dash_source"])}</th><th>{escape(T["dash_parser_event"])}</th>'
+            f'<th>{escape(T["dash_source_status"])}</th></tr></thead><tbody>{"".join(rows)}</tbody></table>'
+        )
+    else:
+        source_table = f'<p class="empty">{escape(T["dash_no_sources"])}</p>'
+    return (
+        f'<section class="panel status"><h2>{escape(T["dash_status_title"])}</h2>'
+        f'<p><span class="state {state}">{escape(overall)}</span> '
+        f'<span class="sub">{escape(T["dash_started_at"])}: {escape(started_text)}</span></p>'
+        f'{source_table}</section>'
+    )
+
+
 def render_html(summary: dict, T: dict, period: str = "7d", refresh: Optional[int] = None,
-                links: bool = True) -> str:
+                links: bool = True, status: Optional[dict] = None) -> str:
     t = summary["totals"]
     start = summary["since"][:16].replace("T", " ") if summary["since"] else T["rp_beginning"]
     period_txt = f"{start} → {summary['until'][:16].replace('T', ' ')} UTC"
@@ -148,7 +189,8 @@ def render_html(summary: dict, T: dict, period: str = "7d", refresh: Optional[in
         f'{meta_refresh}<title>BRUTU$ — {escape(T["rp_title"])}</title><style>{_CSS}</style></head><body>'
         f'<header><div><h1>BRUTU<span>$</span> — {escape(T["rp_title"])}</h1>'
         f'<div class="sub">{escape(period_txt)}</div></div>{nav}</header>'
-        f'<main><div class="cards">{cards}</div><div class="grid">{panel_html}</div></main></body></html>'
+        f'<main>{_render_status(status, T)}<div class="cards">{cards}</div>'
+        f'<div class="grid">{panel_html}</div></main></body></html>'
     )
 
 
@@ -177,7 +219,12 @@ def is_loopback(host: str) -> bool:
         return False
 
 
-def create_server(path: str, host: str = "127.0.0.1", port: int = 8080) -> ThreadingHTTPServer:
+def create_server(
+    path: str,
+    host: str = "127.0.0.1",
+    port: int = 8080,
+    status_provider: Optional[Callable[[], dict]] = None,
+) -> ThreadingHTTPServer:
     class Handler(BaseHTTPRequestHandler):
         server_version = "BRUTUS-dashboard"
 
@@ -197,6 +244,19 @@ def create_server(path: str, host: str = "127.0.0.1", port: int = 8080) -> Threa
         def do_GET(self) -> None:  # noqa: N802 (http.server API)
             url = urlparse(self.path)
             period = (parse_qs(url.query).get("since") or ["7d"])[0]
+            if url.path == "/api/status":
+                if status_provider is None:
+                    self._send(503, b"Live monitor status unavailable", "text/plain; charset=utf-8")
+                    return
+                try:
+                    status = status_provider()
+                except (OSError, RuntimeError) as exc:
+                    log.error("Dashboard: cannot read monitor status: %s", exc)
+                    self._send(500, b"Cannot read monitor status", "text/plain; charset=utf-8")
+                    return
+                self._send(200, json.dumps(status, ensure_ascii=False).encode("utf-8"),
+                           "application/json; charset=utf-8")
+                return
             if url.path not in ("/", "/api/summary"):
                 self._send(404, b"Not found", "text/plain; charset=utf-8")
                 return
@@ -213,7 +273,14 @@ def create_server(path: str, host: str = "127.0.0.1", port: int = 8080) -> Threa
                 self._send(200, json.dumps(summary, ensure_ascii=False).encode("utf-8"),
                            "application/json; charset=utf-8")
             else:
-                page = render_html(summary, i18n.get_T(), period=period, refresh=REFRESH_SECONDS)
+                try:
+                    status = status_provider() if status_provider else None
+                except (OSError, RuntimeError) as exc:
+                    log.error("Dashboard: cannot read monitor status: %s", exc)
+                    self._send(500, b"Cannot read monitor status", "text/plain; charset=utf-8")
+                    return
+                page = render_html(summary, i18n.get_T(), period=period, refresh=REFRESH_SECONDS,
+                                   status=status)
                 self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
 
         def log_message(self, fmt, *args) -> None:
