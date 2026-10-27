@@ -10,22 +10,19 @@
  ██████╔╝██████╔╝██║   ██║   ██║   ██║   ██║███████╗
  ██╔══██╗██╔══██╗██║   ██║   ██║   ██║   ██║╚════██║
  ██████╔╝██║  ██║╚██████╔╝   ██║   ╚██████╔╝███████║
- ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.10.0
+ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.11.0
 ```
 
 ---
 
-## What's new in v1.10.0
+## What's new in v1.11.0
 
 | | |
 |---|---|
-| 🌍 **Offline GeoIP** | `--geoip-download`, automatic use of `data/geoip.mmdb`, `geo.online_fallback`, `--check` hint |
+| 🌍 **Offline GeoIP** | `--geoip-download` fetches a free database (`data/geoip.mmdb`, used automatically); `geo.online_fallback: false` forbids plain-HTTP lookups; `--check` hints when no local database exists |
 | 🚨 **Breach banner** | The dashboard highlights IPs that logged in successfully after failed attempts |
-| 📡 **Live source status** | The dashboard shows what BRUTU$ monitors right now (running / waiting / error, last event) — also at `/api/status`; `--dashboard` runs detector and dashboard together |
-| 🧙 **`--setup`** | Interactive config wizard: detects log sources, validates webhooks and whitelist, backs up the old config |
-| 🩺 **`--check`** | Environment diagnostics (Python, packages, logs, ports, iptables, webhooks); exit code 1 on failure |
-| 📦 **`install.sh`** | One-step install: venv, dependencies, wizard, check; `--service` installs the systemd unit |
-| 🔐 **`config.example.yaml`** | Template is tracked, your `config.yaml` (with secrets) is git-ignored |
+| 🔌 **Dashboard port 8765** | New default (8080 is commonly taken) |
+| 📘 **Deployment guide** | [docs/DEPLOY.md](docs/DEPLOY.md): VPS with SSH keys, systemd, dashboard over an SSH tunnel (Polish) |
 
 Older releases: see [CHANGELOG.md](CHANGELOG.md).
 

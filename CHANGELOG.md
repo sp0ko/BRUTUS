@@ -2,6 +2,15 @@
 
 All notable changes. The latest release is also summarised in the README.
 
+## v1.11.0
+
+| | |
+|---|---|
+| 🌍 **Offline GeoIP** | `--geoip-download` fetches a free database (`data/geoip.mmdb`, used automatically); `geo.online_fallback: false` forbids plain-HTTP lookups; `--check` hints when no local database exists |
+| 🚨 **Breach banner** | The dashboard highlights IPs that logged in successfully after failed attempts |
+| 🔌 **Dashboard port 8765** | New default (8080 is commonly taken) |
+| 📘 **Deployment guide** | [docs/DEPLOY.md](docs/DEPLOY.md): VPS with SSH keys, systemd, dashboard over an SSH tunnel (Polish) |
+
 ## v1.10.0
 
 | | |
