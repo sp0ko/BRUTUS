@@ -10,10 +10,20 @@
  ██████╔╝██████╔╝██║   ██║   ██║   ██║   ██║███████╗
  ██╔══██╗██╔══██╗██║   ██║   ██║   ██║   ██║╚════██║
  ██████╔╝██║  ██║╚██████╔╝   ██║   ╚██████╔╝███████║
- ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.9.0
+ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.10.0
 ```
 
 ---
+
+## What's new in v1.10.0
+
+| | |
+|---|---|
+| 📡 **Live source status** | The dashboard shows what BRUTU$ monitors right now (running / waiting / error, last event) — also at `/api/status`; `--dashboard` runs detector and dashboard together |
+| 🧙 **`--setup`** | Interactive config wizard: detects log sources, validates webhooks and whitelist, backs up the old config |
+| 🩺 **`--check`** | Environment diagnostics (Python, packages, logs, ports, iptables, webhooks); exit code 1 on failure |
+| 📦 **`install.sh`** | One-step install: venv, dependencies, wizard, check; `--service` installs the systemd unit |
+| 🔐 **`config.example.yaml`** | Template is tracked, your `config.yaml` (with secrets) is git-ignored |
 
 ## What's new in v1.9.0
 
