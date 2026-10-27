@@ -52,5 +52,6 @@ class TestDownload(unittest.TestCase):
 class TestOnlineFallback(unittest.TestCase):
     def test_fallback_disabled_never_goes_online(self):
         geo = GeoLocator(online_fallback=False)
+        geo._reader = None
         geo._lookup_online = lambda ip: self.fail("online lookup attempted")
         self.assertIsNone(geo.lookup("8.8.8.8"))
