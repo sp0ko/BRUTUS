@@ -141,13 +141,28 @@
 
 ## Installation
 
+### One-liner (Linux / macOS)
+
+```bash
+git clone https://github.com/sp0ko/BRUTUS.git
+cd BRUTUS
+./install.sh
+```
+
+`install.sh` creates `.venv`, installs the dependencies, runs the [setup wizard](#1-configure) when no `config.yaml` exists yet, and finishes with a configuration check. Options: `--service` also installs a systemd unit for this directory (root/sudo; it is not started automatically), `--no-setup` copies `config.example.yaml` instead of asking questions, `--print-service` only prints the unit.
+
+### Manual
+
 ```bash
 git clone https://github.com/sp0ko/BRUTUS.git
 cd BRUTUS
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+python main.py --setup
 ```
+
+> Debian/Ubuntu: if creating the virtualenv fails, install `python3-venv` first (`sudo apt install python3-venv`).
 
 ### Linux — log file permissions
 
@@ -161,11 +176,25 @@ sudo usermod -aG adm $USER
 sudo python main.py
 ```
 
+`python main.py --check` tells you whether the current user can actually read your logs.
+
 ---
 
 ## Quick start
 
-### 1. Configure `config.yaml`
+### 1. Configure
+
+```bash
+python main.py --setup
+```
+
+The wizard finds your auth log (or the systemd journal), asks for the alert threshold, Discord/Slack webhooks, whether to enable IP blocking (`off` / `dry-run` / `on`) and which of your own IPs to never alert on, then writes `config.yaml` readable only by you (an existing file is backed up as `config.yaml.bak`). Every option it does not ask about keeps a sensible default; all of them are documented in [`config.example.yaml`](config.example.yaml).
+
+`config.yaml` holds your webhook URLs and is git-ignored — only `config.example.yaml` is tracked. You can also create it by hand:
+
+```bash
+cp config.example.yaml config.yaml
+```
 
 ```yaml
 detection:
@@ -186,13 +215,21 @@ slack:
   webhook_url: "https://hooks.slack.com/services/YOUR_URL"
 ```
 
-### 2. Run it
+### 2. Check it
+
+```bash
+python main.py --check
+```
+
+Verifies — without sending anything — Python version and packages, that every log file exists and is readable, that the parsers are known, that the syslog port is free, that `journalctl` / `iptables` / root are available when needed, that webhook URLs look right, that the threat-intel and GeoIP databases exist and that reports can be written. Problems are listed with a fix hint; the exit code is `1` if anything is broken, so it also works in scripts.
+
+### 3. Run it
 
 ```bash
 python main.py
 ```
 
-### 3. Test your webhooks before anything goes wrong
+### 4. Test your webhooks before anything goes wrong
 
 ```bash
 python main.py --test
@@ -206,6 +243,8 @@ python main.py --test
 python main.py [options]
 
   --config PATH         Custom config file path
+  --setup               Interactive setup wizard — writes the config file
+  --check               Check config, permissions, ports and webhooks, then exit
   --log PATH            Additional log file to monitor
   --type TYPE           Parser: linux_ssh | windows_evtx | nginx | apache | ftp | mysql
   --threshold N         Number of attempts to trigger an alert

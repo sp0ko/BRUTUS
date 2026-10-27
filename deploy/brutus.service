@@ -1,6 +1,8 @@
 # systemd unit for BRUTU$
 #
 # Install:
+#   ./install.sh --service        (installs this unit for the current directory; does not start it)
+# or by hand:
 #   sudo cp -r . /opt/brutus && cd /opt/brutus
 #   sudo python3 -m venv .venv && sudo .venv/bin/pip install -r requirements.txt
 #   sudo cp deploy/brutus.service /etc/systemd/system/brutus.service

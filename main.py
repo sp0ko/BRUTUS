@@ -7,6 +7,8 @@ Real-time SSH/RDP brute-force attack detector.
 Examples
 --------
   python main.py                         # default config.yaml
+  python main.py --setup                 # interactive setup wizard
+  python main.py --check                 # verify config, permissions, ports
   python main.py --config custom.yaml
   python main.py --threshold 3 --window 30
   python main.py --log /var/log/auth.log --type linux_ssh
@@ -336,6 +338,8 @@ def build_arg_parser(T: dict) -> argparse.ArgumentParser:
     p.add_argument("--dashboard-host", default="127.0.0.1",  help=T["help_dash_host"])
     p.add_argument("--dashboard-port", type=int, default=8080, help=T["help_dash_port"])
     p.add_argument("--version",     action="version",       version=f"BRUTU$ {VERSION}")
+    p.add_argument("--setup",       action="store_true",    help=T["help_setup"])
+    p.add_argument("--check",       action="store_true",    help=T["help_check"])
     return p
 
 
@@ -384,11 +388,20 @@ def main() -> int:
 
     args = build_arg_parser(T).parse_args()
 
+    if args.setup:
+        from detector.setup_wizard import run_setup
+        return run_setup(args.config, T)
+
     if not os.path.exists(args.config):
         print(T["err_config"] % args.config, file=sys.stderr)
+        print(T["err_config_hint"], file=sys.stderr)
         return 1
 
     cfg = merge_cli_overrides(load_config(args.config), args)
+
+    if args.check:
+        from detector.setup_wizard import run_check
+        return run_check(args.config, cfg, T)
 
     log_cfg = cfg.get("logging", {})
     setup_logging(log_cfg.get("level", "INFO"), log_cfg.get("file"))
