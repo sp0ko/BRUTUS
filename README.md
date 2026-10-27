@@ -385,6 +385,8 @@ BRUTUS runs `journalctl -f` for these units (new entries only) and restarts it i
 
 ## Running as a systemd service
 
+Step-by-step VPS deployment guide (Polish): [docs/DEPLOY.md](docs/DEPLOY.md).
+
 A ready-made unit is in [`deploy/brutus.service`](deploy/brutus.service):
 
 ```bash
