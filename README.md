@@ -204,7 +204,7 @@ python main.py [options]
   --output FILE         Write the report to a file
   --dashboard           Run the detector with the local web dashboard
   --dashboard-host H    Dashboard bind address (default 127.0.0.1)
-  --dashboard-port N    Dashboard port (default 8080)
+  --dashboard-port N    Dashboard port (default 8765)
   --blocked             Show blocked IPs report and exit
   --update-threat-db    Download/update IP reputation DB and exit
   --geoip-download      Download the free GeoIP database to data/geoip.mmdb and exit
@@ -336,12 +336,12 @@ Replay is read-only: it prints alerts and a summary (lines, failed/successful lo
 python main.py --report                                   # last 7 days, text
 python main.py --report --since 30d --format markdown --output weekly.md
 python main.py --report --since all --format html --output report.html
-python main.py --dashboard                                # detector + http://127.0.0.1:8080/
+python main.py --dashboard                                # detector + http://127.0.0.1:8765/
 ```
 
 `--dashboard` runs BRUTUS monitoring and the dashboard together. The status panel shows each configured log file, syslog listener and journald source, including its current state, parser, errors and time of the last recognized event. The page refreshes every 30 s; JSON is available at `/api/summary` and live source status at `/api/status`. The reports view offers `?since=24h|7d|30d|all`.
 
-The dashboard is read-only and has **no authentication**: keep it on `127.0.0.1` and reach it through an SSH tunnel (`ssh -L 8080:127.0.0.1:8080 host`) or a password-protected reverse proxy. Usernames come from attacker-controlled log lines, so everything is HTML-escaped and a strict Content-Security-Policy is sent.
+The dashboard is read-only and has **no authentication**: keep it on `127.0.0.1` and reach it through an SSH tunnel (`ssh -L 8765:127.0.0.1:8765 host`) or a password-protected reverse proxy. Usernames come from attacker-controlled log lines, so everything is HTML-escaped and a strict Content-Security-Policy is sent.
 
 Cron example — weekly Markdown report: `0 8 * * 1 cd /opt/brutus && python3 main.py --report --since 7d --format markdown --output /var/reports/brutus-weekly.md`
 

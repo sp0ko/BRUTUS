@@ -232,7 +232,7 @@ def is_loopback(host: str) -> bool:
 def create_server(
     path: str,
     host: str = "127.0.0.1",
-    port: int = 8080,
+    port: int = 8765,
     status_provider: Optional[Callable[[], dict]] = None,
 ) -> ThreadingHTTPServer:
     class Handler(BaseHTTPRequestHandler):

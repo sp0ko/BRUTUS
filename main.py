@@ -337,7 +337,7 @@ def build_arg_parser(T: dict) -> argparse.ArgumentParser:
     p.add_argument("--output",      metavar="FILE",          help=T["help_output"])
     p.add_argument("--dashboard",   action="store_true",    help=T["help_dashboard"])
     p.add_argument("--dashboard-host", default="127.0.0.1",  help=T["help_dash_host"])
-    p.add_argument("--dashboard-port", type=int, default=8080, help=T["help_dash_port"])
+    p.add_argument("--dashboard-port", type=int, default=8765, help=T["help_dash_port"])
     p.add_argument("--version",     action="version",       version=f"BRUTU$ {VERSION}")
     p.add_argument("--setup",       action="store_true",    help=T["help_setup"])
     p.add_argument("--check",       action="store_true",    help=T["help_check"])

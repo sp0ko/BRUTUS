@@ -103,5 +103,5 @@ cat <<EOF
 Done. Next steps:
   .venv/bin/python main.py --test        # send a simulated attack to your webhooks
   .venv/bin/python main.py               # run in the foreground
-  .venv/bin/python main.py --dashboard   # run with the web dashboard (127.0.0.1:8080)
+  .venv/bin/python main.py --dashboard   # run with the web dashboard (127.0.0.1:8765)
 EOF
