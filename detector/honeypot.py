@@ -12,6 +12,8 @@ from collections import Counter, deque
 from datetime import datetime
 from typing import Dict, Iterable, List, Optional
 
+from utils.ip_utils import ip_in_list
+
 from .stats import _parse_ts, _timeline
 
 _MAX_TEXT = 120
@@ -32,6 +34,7 @@ BEHAVIOURS = (
 def classify(command: str) -> List[str]:
     return [name for name, rx in BEHAVIOURS if rx.search(command)]
 _RECENT_COMMANDS = 10
+EMPTY = "(empty)"
 
 
 def _clip(value) -> str:
@@ -39,8 +42,10 @@ def _clip(value) -> str:
     return text if len(text) <= _MAX_TEXT else text[:_MAX_TEXT - 1] + "…"
 
 
-def load_cowrie(paths: Iterable[str], since: Optional[datetime] = None) -> List[dict]:
-    """Read Cowrie events (malformed lines skipped); missing files are ignored."""
+def load_cowrie(paths: Iterable[str], since: Optional[datetime] = None,
+                exclude_nets: Optional[list] = None) -> List[dict]:
+    """Read Cowrie events (malformed lines skipped); missing files are ignored.
+    Events from addresses in *exclude_nets* (whitelist, own host) are dropped."""
     records: List[dict] = []
     for path in paths:
         try:
@@ -60,6 +65,8 @@ def load_cowrie(paths: Iterable[str], since: Optional[datetime] = None) -> List[
                     continue
                 ts = _parse_ts(rec.get("timestamp"))
                 if ts is None or (since is not None and ts < since):
+                    continue
+                if exclude_nets and ip_in_list(str(rec.get("src_ip") or ""), exclude_nets):
                     continue
                 rec["_ts"] = ts
                 records.append(rec)
@@ -91,7 +98,8 @@ def summarize_honeypot(records: List[dict], since: Optional[datetime], until: da
             attempts += 1
             attempt_events.append(r)
             ips[ip] += 1
-            user, pw = _clip(r.get("username")), _clip(r.get("password"))
+            user = _clip(r.get("username")) or EMPTY
+            pw = _clip(r.get("password")) or EMPTY
             usernames[user] += 1
             passwords[pw] += 1
             credentials[f"{user} / {pw}"] += 1
@@ -106,7 +114,9 @@ def summarize_honeypot(records: List[dict], since: Optional[datetime], until: da
             behaviours.update(tags)
             recent.append({"time": r["_ts"].strftime("%m-%d %H:%M:%S"), "ip": ip, "command": cmd, "tags": tags})
         elif event == "cowrie.session.file_download":
-            downloads[_clip(r.get("url") or r.get("outfile"))] += 1
+            sha = str(r.get("shasum") or "")
+            # Files built with echo/cat have no URL; say so instead of showing a local path.
+            downloads[_clip(r.get("url")) or f"(written in shell) {sha[:12]}"] += 1
             if re.fullmatch(r"[0-9a-fA-F]{64}", str(r.get("shasum") or "")):
                 hashes[str(r["shasum"]).lower()] += 1
         elif event == "cowrie.client.version":

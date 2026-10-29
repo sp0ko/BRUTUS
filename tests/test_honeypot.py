@@ -65,6 +65,17 @@ class TestHoneypot(unittest.TestCase):
         self.assertEqual(s["hashes"], [["a" * 64, 1]])
         self.assertEqual(s["recent_commands"][0]["tags"], ["download_exec"])
 
+    def test_whitelist_excluded_and_empty_labels(self):
+        from utils.ip_utils import parse_cidr_list
+        self.assertEqual(load_cowrie([self.path], exclude_nets=parse_cidr_list(["5.6.7.0/24"])), [])
+        rec = dict(_events()[2], password="")
+        with open(self.path, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(rec) + "\n")
+            fh.write(json.dumps(dict(_events()[-1], url="", shasum="b" * 64)) + "\n")
+        s = self.summary()
+        self.assertEqual(s["passwords"][0][0], "(empty)")
+        self.assertEqual(s["downloads"][0][0], "(written in shell) " + "b" * 12)
+
     def test_missing_file_is_ignored(self):
         self.assertEqual(load_cowrie(["/nonexistent/cowrie.json"]), [])
 

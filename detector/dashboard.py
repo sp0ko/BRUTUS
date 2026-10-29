@@ -277,11 +277,12 @@ def build_summary(path: str, period: str, top: int = 10) -> dict:
     return summarize(records, since, until, top=top)
 
 
-def build_honeypot_summary(paths: List[str], period: str, top: int = 10) -> dict:
+def build_honeypot_summary(paths: List[str], period: str, top: int = 10,
+                           exclude_nets: Optional[list] = None) -> dict:
     delta = parse_period(period)
     until = datetime.utcnow()
     since = until - delta if delta else None
-    return summarize_honeypot(load_cowrie(paths, since), since, until, top=top)
+    return summarize_honeypot(load_cowrie(paths, since, exclude_nets), since, until, top=top)
 
 
 def is_loopback(host: str) -> bool:
@@ -299,6 +300,7 @@ def create_server(
     port: int = 8765,
     status_provider: Optional[Callable[[], dict]] = None,
     honeypot_paths: Optional[List[str]] = None,
+    honeypot_exclude: Optional[list] = None,
 ) -> ThreadingHTTPServer:
     class Handler(BaseHTTPRequestHandler):
         server_version = "BRUTUS-dashboard"
@@ -347,7 +349,7 @@ def create_server(
             if url.path == "/api/summary":
                 payload = summary
                 if honeypot_paths:
-                    payload = dict(summary, honeypot=build_honeypot_summary(honeypot_paths, period))
+                    payload = dict(summary, honeypot=build_honeypot_summary(honeypot_paths, period, exclude_nets=honeypot_exclude))
                 self._send(200, json.dumps(payload, ensure_ascii=False).encode("utf-8"),
                            "application/json; charset=utf-8")
             else:
@@ -358,7 +360,7 @@ def create_server(
                     self._send(500, b"Cannot read monitor status", "text/plain; charset=utf-8")
                     return
                 try:
-                    honeypot = build_honeypot_summary(honeypot_paths, period) if honeypot_paths else None
+                    honeypot = build_honeypot_summary(honeypot_paths, period, exclude_nets=honeypot_exclude) if honeypot_paths else None
                 except OSError as exc:
                     log.error("Dashboard: cannot read honeypot log: %s", exc)
                     honeypot = None

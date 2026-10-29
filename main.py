@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-BRUTU$ v1.14.1
+BRUTU$ v1.14.2
 =============
 Real-time SSH/RDP brute-force attack detector.
 
@@ -42,10 +42,10 @@ from detector.alerts.slack_alert import SlackAlert
 import utils.i18n as i18n
 from utils.geo import GeoLocator
 from utils.blocker import IPBlocker
-from utils.ip_utils import parse_cidr_list
+from utils.ip_utils import local_addresses, parse_cidr_list
 from utils.threat_intel import ThreatIntel
 
-VERSION = "1.14.1"
+VERSION = "1.14.2"
 DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "config.yaml")
 
 log = logging.getLogger("brute-force-detector")
@@ -612,6 +612,7 @@ def main() -> int:
                 status_provider=monitor.get_status,
                 honeypot_paths=[f["path"] for f in log_files
                                 if f.get("type") == "cowrie" and f.get("path")],
+                honeypot_exclude=whitelist + parse_cidr_list(sorted(local_addresses())),
             )
         except OSError as exc:
             print(T["dash_err"] % exc, file=sys.stderr)

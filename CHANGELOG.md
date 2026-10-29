@@ -2,6 +2,12 @@
 
 All notable changes. The latest release is also summarised in the README.
 
+## v1.14.2
+
+| | |
+|---|---|
+| 🧹 **Cleaner honeypot stats** | Whitelisted IPs and this host are excluded from the honeypot section (your own tests no longer skew it); empty passwords show as `(empty)`; files written with `echo` are labelled instead of showing a local path |
+
 ## v1.14.1
 
 | | |
