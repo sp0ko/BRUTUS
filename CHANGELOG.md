@@ -2,6 +2,12 @@
 
 All notable changes. The latest release is also summarised in the README.
 
+## v1.15.0
+
+| | |
+|---|---|
+| 🎯 **Campaigns & MITRE ATT&CK** | Honeypot "Top commands" and "Attacker behaviour" now count distinct IPs (one bot looping `uname` no longer drowns everything); new Campaigns panel groups the same command seen from many IPs; behaviour tags carry MITRE ATT&CK technique IDs (e.g. SSH key → T1098.004, recon → T1082); new `permission change` tag for `chattr` |
+
 ## v1.14.2
 
 | | |

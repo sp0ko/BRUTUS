@@ -16,7 +16,7 @@ from typing import Callable, List, Optional
 from urllib.parse import parse_qs, urlparse
 
 import utils.i18n as i18n
-from .honeypot import load_cowrie, summarize_honeypot
+from .honeypot import MITRE, load_cowrie, summarize_honeypot
 from .stats import PERIOD_CHOICES, load_alerts, parse_period, summarize
 
 log = logging.getLogger("brute-force-detector.dashboard")
@@ -110,14 +110,29 @@ def _ip_table(top_ips: List[dict], T: dict) -> str:
     return f"<table>{head}{''.join(body)}</table>"
 
 
-_TAG_KEYS = ("ssh_key", "miner", "download_exec", "botnet", "persistence", "passwd", "cleanup", "recon")
+_TAG_KEYS = tuple(MITRE)
+_RED_TAGS = ("ssh_key", "miner", "botnet", "persistence", "passwd")
 
 
 def _tags(tags: List[str], T: dict) -> str:
     return "".join(
-        f'<span class="tag {"b" if t in ("ssh_key", "miner", "botnet", "persistence", "passwd") else "t"}">'
-        f'{escape(T.get("hp_tag_" + t, t))}</span>' for t in tags if t in _TAG_KEYS
+        f'<span class="tag {"b" if t in _RED_TAGS else "t"}" title="MITRE ATT&amp;CK {MITRE[t]}">'
+        f'{escape(T.get("hp_tag_" + t, t))} · {MITRE[t]}</span>' for t in tags if t in _TAG_KEYS
     )
+
+
+def _campaigns(items: List[dict], T: dict) -> str:
+    if not items:
+        return f'<p class="empty">{escape(T["rp_none"])}</p>'
+    head = (f'<tr><th>{escape(T["hp_col_cmd"])}</th><th class="n">{escape(T["hp_col_ips"])}</th>'
+            f'<th class="n">{escape(T["hp_col_runs"])}</th><th>{escape(T["hp_col_span"])}</th></tr>')
+    body = "".join(
+        f'<tr><td><code>{escape(c["command"])}</code>{_tags(c["tags"], T)}</td>'
+        f'<td class="n">{int(c["ips"])}</td><td class="n">{int(c["runs"])}</td>'
+        f'<td>{escape(c["first"])} → {escape(c["last"])}</td></tr>'
+        for c in items
+    )
+    return f"<table>{head}{body}</table>"
 
 
 def _render_honeypot(hp: Optional[dict], T: dict) -> str:
@@ -150,7 +165,9 @@ def _render_honeypot(hp: Optional[dict], T: dict) -> str:
         ("", T["hp_usernames"], _rows(hp["usernames"], T)),
         ("", T["hp_creds"], _rows(hp["credentials"], T)),
         ("", T["hp_top_ips"], _rows(hp["top_ips"], T)),
-        ("", T["hp_behaviours"], _rows([[T.get("hp_tag_" + k, k), v] for k, v in hp["behaviours"]], T)),
+        ("wide", T["hp_campaigns"], _campaigns(hp["campaigns"], T)),
+        ("", T["hp_behaviours"], _rows([[f'{T.get("hp_tag_" + k, k)} · {MITRE.get(k, "")}', v]
+                                        for k, v in hp["behaviours"]], T)),
         ("", T["hp_top_cmds"], _rows(hp["commands"], T)),
         ("", T["hp_hashes"], _rows(hp["hashes"], T)),
         ("", T["hp_urls"], _rows(hp["downloads"], T)),

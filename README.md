@@ -10,7 +10,7 @@
  ██████╔╝██████╔╝██║   ██║   ██║   ██║   ██║███████╗
  ██╔══██╗██╔══██╗██║   ██║   ██║   ██║   ██║╚════██║
  ██████╔╝██║  ██║╚██████╔╝   ██║   ╚██████╔╝███████║
- ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.14.2
+ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.15.0
 ```
 
 ## 🍯 Works with Cowrie honeypot
@@ -27,10 +27,11 @@ Step-by-step setup (Docker, moving real SSH to another port): [docs/DEPLOY.md](d
 
 ---
 
-## What's new in v1.14.2
+## What's new in v1.15.0
 
 | | |
 |---|---|
+| 🎯 **Campaigns & MITRE ATT&CK** | Honeypot "Top commands" and "Attacker behaviour" now count distinct IPs (one bot looping `uname` no longer drowns everything); new Campaigns panel groups the same command seen from many IPs; behaviour tags carry MITRE ATT&CK technique IDs (e.g. SSH key → T1098.004, recon → T1082); new `permission change` tag for `chattr` |
 | 🧹 **Cleaner honeypot stats** | Whitelisted IPs and this host are excluded from the honeypot section; empty passwords show as `(empty)`; echo-written files are labelled |
 | 🕵️ **Attacker behaviour** | Honeypot commands are tagged (SSH key, crypto miner, download & run, botnet, persistence, password change, cover tracks, recon) with a summary panel and tags in recent commands; downloaded files are listed by SHA256 for VirusTotal lookup |
 | 🍯 **Honeypot dashboard** | When a `cowrie` log is configured, the dashboard gets a Honeypot section: sessions, login attempts, shell entries, top passwords / usernames / pairs / commands / downloaded URLs / SSH clients, recent commands and a timeline (also in `/api/summary` as `honeypot`) |

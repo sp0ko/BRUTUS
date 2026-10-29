@@ -76,6 +76,26 @@ class TestHoneypot(unittest.TestCase):
         self.assertEqual(s["passwords"][0][0], "(empty)")
         self.assertEqual(s["downloads"][0][0], "(written in shell) " + "b" * 12)
 
+    def test_rankings_count_distinct_ips_and_campaigns(self):
+        now = datetime.utcnow().isoformat() + "Z"
+        key = 'echo "ssh-rsa AAAA" >> ~/.ssh/authorized_keys'
+        evs = [dict(eventid="cowrie.command.input", src_ip=ip, timestamp=now, input=cmd)
+               for ip, cmd in [("1.1.1.1", "uname -a")] * 5 + [("1.1.1.1", key), ("2.2.2.2", key)]]
+        with open(self.path, "w", encoding="utf-8") as fh:
+            for e in evs:
+                fh.write(json.dumps(e) + "\n")
+        s = self.summary()
+        self.assertIn(["uname -a", 1], s["commands"])
+        self.assertIn(["recon", 1], s["behaviours"])
+        self.assertEqual(s["behaviours"][0][1], 2)
+        camp = s["campaigns"][0]
+        self.assertEqual((camp["ips"], camp["runs"]), (2, 2))
+        self.assertIn("T1098.004", camp["mitre"])
+        self.assertEqual([c["command"] for c in s["campaigns"]], [key])
+
+    def test_chattr_is_permission_change(self):
+        self.assertIn("perm_mod", classify("chattr -ia .ssh"))
+
     def test_missing_file_is_ignored(self):
         self.assertEqual(load_cowrie(["/nonexistent/cowrie.json"]), [])
 

@@ -26,9 +26,26 @@ BEHAVIOURS = (
     ("botnet", re.compile(r"busybox|mirai|/bin/\.\w+|\bgafgyt\b|\bbot\b", re.I)),
     ("persistence", re.compile(r"crontab|/etc/cron|rc\.local|systemctl\s+(enable|start)|\.bashrc|useradd|adduser", re.I)),
     ("passwd", re.compile(r"\bpasswd\b|chpasswd|usermod", re.I)),
+    ("perm_mod", re.compile(r"\bchattr\b", re.I)),
     ("cleanup", re.compile(r"rm\s+-\w*r\w*f|history\s+-c|unset\s+HISTFILE|HISTFILE=|/dev/null\s+2>&1\s*;?\s*rm", re.I)),
     ("recon", re.compile(r"\b(uname|whoami|lscpu|nproc|uptime|hostname|ifconfig|lsb_release)\b|/proc/(cpuinfo|meminfo)|/etc/(os-release|passwd|issue)|free\s+-|\bid\b|\bw\b|\bls\b|\bps\b", re.I)),
 )
+
+
+# MITRE ATT&CK technique per behaviour tag (https://attack.mitre.org/).
+MITRE = {
+    "recon": "T1082",
+    "ssh_key": "T1098.004",
+    "miner": "T1496",
+    "download_exec": "T1105",
+    "botnet": "T1059.004",
+    "persistence": "T1053.003",
+    "passwd": "T1098",
+    "perm_mod": "T1222.002",
+    "cleanup": "T1070",
+}
+
+_MAX_CAMPAIGNS = 8
 
 
 def classify(command: str) -> List[str]:
@@ -78,10 +95,11 @@ def summarize_honeypot(records: List[dict], since: Optional[datetime], until: da
     passwords: Counter = Counter()
     usernames: Counter = Counter()
     credentials: Counter = Counter()
-    commands: Counter = Counter()
+    command_ips: Dict[str, set] = {}
+    behaviour_ips: Dict[str, set] = {}
+    campaigns: Dict[str, dict] = {}
     downloads: Counter = Counter()
     hashes: Counter = Counter()
-    behaviours: Counter = Counter()
     clients: Counter = Counter()
     ips: Counter = Counter()
     shell_ips = set()
@@ -109,9 +127,18 @@ def summarize_honeypot(records: List[dict], since: Optional[datetime], until: da
         elif event == "cowrie.command.input":
             command_count += 1
             cmd = _clip(r.get("input"))
-            commands[cmd] += 1
-            tags = classify(str(r.get("input") or ""))
-            behaviours.update(tags)
+            raw = str(r.get("input") or "").strip()
+            tags = classify(raw)
+            command_ips.setdefault(cmd, set()).add(ip)
+            for tag in tags:
+                behaviour_ips.setdefault(tag, set()).add(ip)
+            camp = campaigns.setdefault(raw, {
+                "command": cmd, "ips": set(), "runs": 0, "tags": tags,
+                "first": r["_ts"], "last": r["_ts"],
+            })
+            camp["ips"].add(ip)
+            camp["runs"] += 1
+            camp["last"] = r["_ts"]
             recent.append({"time": r["_ts"].strftime("%m-%d %H:%M:%S"), "ip": ip, "command": cmd, "tags": tags})
         elif event == "cowrie.session.file_download":
             sha = str(r.get("shasum") or "")
@@ -125,7 +152,21 @@ def summarize_honeypot(records: List[dict], since: Optional[datetime], until: da
     def ranked(counter: Counter) -> List[list]:
         return [[k, v] for k, v in sorted(counter.items(), key=lambda kv: (-kv[1], kv[0]))[:top]]
 
+    # Rankings count distinct source IPs, so one bot looping the same command
+    # cannot drown out a campaign that hits from many addresses.
+    commands = Counter({k: len(v) for k, v in command_ips.items()})
+    behaviours = Counter({k: len(v) for k, v in behaviour_ips.items()})
+    campaign_list = sorted(
+        (c for c in campaigns.values() if len(c["ips"]) >= 2 or any(t != "recon" for t in c["tags"])),
+        key=lambda c: (-len(c["ips"]), -c["runs"], c["command"]),
+    )[:_MAX_CAMPAIGNS]
+
     return {
+        "campaigns": [{
+            "command": c["command"], "ips": len(c["ips"]), "runs": c["runs"], "tags": c["tags"],
+            "mitre": [MITRE[t] for t in c["tags"] if t in MITRE],
+            "first": c["first"].strftime("%m-%d %H:%M"), "last": c["last"].strftime("%m-%d %H:%M"),
+        } for c in campaign_list],
         "totals": {
             "sessions": sessions,
             "attempts": attempts,
