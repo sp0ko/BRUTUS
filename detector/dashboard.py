@@ -16,6 +16,7 @@ from typing import Callable, List, Optional
 from urllib.parse import parse_qs, urlparse
 
 import utils.i18n as i18n
+from .honeypot import load_cowrie, summarize_honeypot
 from .stats import PERIOD_CHOICES, load_alerts, parse_period, summarize
 
 log = logging.getLogger("brute-force-detector.dashboard")
@@ -53,6 +54,7 @@ code{color:#9cdcfe}.tag{display:inline-block;padding:0 6px;border-radius:4px;fon
 .state.waiting,.state.starting{color:#f5c26b;background:#4d3b12}.error-text{color:#ff9b9b}
 svg{width:100%;height:auto;display:block}.bar{fill:#4a90e2}.bar:hover{fill:#7ab4f5}
 .axis{fill:#8b98a9;font-size:10px}.empty{color:#8b98a9;font-style:italic}
+h2.section{margin:28px 0 12px;font-size:16px;color:#f5a623}
 """
 
 
@@ -108,6 +110,48 @@ def _ip_table(top_ips: List[dict], T: dict) -> str:
     return f"<table>{head}{''.join(body)}</table>"
 
 
+def _render_honeypot(hp: Optional[dict], T: dict) -> str:
+    if hp is None:
+        return ""
+    t = hp["totals"]
+    cards = "".join(
+        f'<div class="card {cls}"><b>{int(t[key])}</b>{escape(T[label])}</div>'
+        for key, label, cls in (
+            ("sessions", "hp_sessions", ""), ("attempts", "hp_attempts", ""),
+            ("unique_ips", "hp_ips", ""), ("shell_logins", "hp_shell", "warn" if t["shell_logins"] else ""),
+            ("commands", "hp_commands", ""), ("downloads", "hp_downloads", "bad" if t["downloads"] else ""),
+        )
+    )
+    if hp["recent_commands"]:
+        recent = (
+            f'<table><tr><th>{escape(T["hp_col_time"])}</th><th>IP</th><th>{escape(T["hp_col_cmd"])}</th></tr>'
+            + "".join(
+                f'<tr><td>{escape(c["time"])}</td><td><code>{escape(c["ip"])}</code></td>'
+                f'<td><code>{escape(c["command"])}</code></td></tr>'
+                for c in hp["recent_commands"]
+            ) + "</table>"
+        )
+    else:
+        recent = f'<p class="empty">{escape(T["rp_none"])}</p>'
+    panels = [
+        ("wide", T["hp_timeline"], _timeline_svg(hp["timeline"]["buckets"])
+         or f'<p class="empty">{escape(T["rp_none"])}</p>'),
+        ("", T["hp_passwords"], _rows(hp["passwords"], T)),
+        ("", T["hp_usernames"], _rows(hp["usernames"], T)),
+        ("", T["hp_creds"], _rows(hp["credentials"], T)),
+        ("", T["hp_top_ips"], _rows(hp["top_ips"], T)),
+        ("", T["hp_top_cmds"], _rows(hp["commands"], T)),
+        ("", T["hp_urls"], _rows(hp["downloads"], T)),
+        ("", T["hp_clients"], _rows(hp["clients"], T)),
+        ("wide", T["hp_recent"], recent),
+    ]
+    panel_html = "".join(
+        f'<section class="panel {cls}"><h2>{escape(title)}</h2>{body}</section>' for cls, title, body in panels
+    )
+    return (f'<h2 class="section">{escape(T["hp_title"])}</h2>'
+            f'<div class="cards">{cards}</div><div class="grid">{panel_html}</div>')
+
+
 def _render_status(status: Optional[dict], T: dict) -> str:
     if status is None:
         return ""
@@ -147,7 +191,8 @@ def _render_status(status: Optional[dict], T: dict) -> str:
 
 
 def render_html(summary: dict, T: dict, period: str = "7d", refresh: Optional[int] = None,
-                links: bool = True, status: Optional[dict] = None) -> str:
+                links: bool = True, status: Optional[dict] = None,
+                honeypot: Optional[dict] = None) -> str:
     t = summary["totals"]
     start = summary["since"][:16].replace("T", " ") if summary["since"] else T["rp_beginning"]
     period_txt = f"{start} → {summary['until'][:16].replace('T', ' ')} UTC"
@@ -200,7 +245,7 @@ def render_html(summary: dict, T: dict, period: str = "7d", refresh: Optional[in
         f'<header><div><h1>BRUTU<span>$</span> — {escape(T["rp_title"])}</h1>'
         f'<div class="sub">{escape(period_txt)}</div></div>{nav}</header>'
         f'<main>{breach_banner}{_render_status(status, T)}<div class="cards">{cards}</div>'
-        f'<div class="grid">{panel_html}</div></main></body></html>'
+        f'<div class="grid">{panel_html}</div>{_render_honeypot(honeypot, T)}</main></body></html>'
     )
 
 
@@ -220,6 +265,13 @@ def build_summary(path: str, period: str, top: int = 10) -> dict:
     return summarize(records, since, until, top=top)
 
 
+def build_honeypot_summary(paths: List[str], period: str, top: int = 10) -> dict:
+    delta = parse_period(period)
+    until = datetime.utcnow()
+    since = until - delta if delta else None
+    return summarize_honeypot(load_cowrie(paths, since), since, until, top=top)
+
+
 def is_loopback(host: str) -> bool:
     if host == "localhost":
         return True
@@ -234,6 +286,7 @@ def create_server(
     host: str = "127.0.0.1",
     port: int = 8765,
     status_provider: Optional[Callable[[], dict]] = None,
+    honeypot_paths: Optional[List[str]] = None,
 ) -> ThreadingHTTPServer:
     class Handler(BaseHTTPRequestHandler):
         server_version = "BRUTUS-dashboard"
@@ -280,7 +333,10 @@ def create_server(
                 self._send(500, b"Cannot read report file", "text/plain; charset=utf-8")
                 return
             if url.path == "/api/summary":
-                self._send(200, json.dumps(summary, ensure_ascii=False).encode("utf-8"),
+                payload = summary
+                if honeypot_paths:
+                    payload = dict(summary, honeypot=build_honeypot_summary(honeypot_paths, period))
+                self._send(200, json.dumps(payload, ensure_ascii=False).encode("utf-8"),
                            "application/json; charset=utf-8")
             else:
                 try:
@@ -289,8 +345,13 @@ def create_server(
                     log.error("Dashboard: cannot read monitor status: %s", exc)
                     self._send(500, b"Cannot read monitor status", "text/plain; charset=utf-8")
                     return
+                try:
+                    honeypot = build_honeypot_summary(honeypot_paths, period) if honeypot_paths else None
+                except OSError as exc:
+                    log.error("Dashboard: cannot read honeypot log: %s", exc)
+                    honeypot = None
                 page = render_html(summary, i18n.get_T(), period=period, refresh=REFRESH_SECONDS,
-                                   status=status)
+                                   status=status, honeypot=honeypot)
                 self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
 
         def log_message(self, fmt, *args) -> None:

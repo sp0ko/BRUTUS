@@ -2,6 +2,12 @@
 
 All notable changes. The latest release is also summarised in the README.
 
+## v1.14.0
+
+| | |
+|---|---|
+| 🍯 **Honeypot dashboard** | When a `cowrie` log is configured, the dashboard gets a Honeypot section: sessions, login attempts, shell entries, top passwords / usernames / pairs / commands / downloaded URLs / SSH clients, recent commands and a timeline (also in `/api/summary` as `honeypot`) |
+
 ## v1.13.1
 
 | | |

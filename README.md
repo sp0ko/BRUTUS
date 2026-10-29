@@ -10,7 +10,7 @@
  ██████╔╝██████╔╝██║   ██║   ██║   ██║   ██║███████╗
  ██╔══██╗██╔══██╗██║   ██║   ██║   ██║   ██║╚════██║
  ██████╔╝██║  ██║╚██████╔╝   ██║   ╚██████╔╝███████║
- ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.13.1
+ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.14.0
 ```
 
 ## 🍯 Works with Cowrie honeypot
@@ -27,10 +27,11 @@ Step-by-step setup (Docker, moving real SSH to another port): [docs/DEPLOY.md](d
 
 ---
 
-## What's new in v1.13.1
+## What's new in v1.14.0
 
 | | |
 |---|---|
+| 🍯 **Honeypot dashboard** | When a `cowrie` log is configured, the dashboard gets a Honeypot section: sessions, login attempts, shell entries, top passwords / usernames / pairs / commands / downloaded URLs / SSH clients, recent commands and a timeline (also in `/api/summary` as `honeypot`) |
 | 🔕 **Less alert spam from low-and-slow** | A persistent scanner is reported once per window; the next slow alert for the same IP needs its failure count to double (or the attack to fade and return) |
 
 Also in v1.13.0: Cowrie honeypot log parser (`type: cowrie`) — every login attempt counts as a `HONEYPOT` attack, never as a breach. In v1.12.x: low-and-slow detection (`slow_threshold` / `slow_window`), quieter "Active IPs" log, dashboard/report periods `1h` and `8h`. Older releases: see [CHANGELOG.md](CHANGELOG.md).
