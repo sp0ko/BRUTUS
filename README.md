@@ -10,7 +10,7 @@
  ██████╔╝██████╔╝██║   ██║   ██║   ██║   ██║███████╗
  ██╔══██╗██╔══██╗██║   ██║   ██║   ██║   ██║╚════██║
  ██████╔╝██║  ██║╚██████╔╝   ██║   ╚██████╔╝███████║
- ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.14.0
+ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.14.1
 ```
 
 ## 🍯 Works with Cowrie honeypot
@@ -27,10 +27,11 @@ Step-by-step setup (Docker, moving real SSH to another port): [docs/DEPLOY.md](d
 
 ---
 
-## What's new in v1.14.0
+## What's new in v1.14.1
 
 | | |
 |---|---|
+| 🕵️ **Attacker behaviour** | Honeypot commands are tagged (SSH key, crypto miner, download & run, botnet, persistence, password change, cover tracks, recon) with a summary panel and tags in recent commands; downloaded files are listed by SHA256 for VirusTotal lookup |
 | 🍯 **Honeypot dashboard** | When a `cowrie` log is configured, the dashboard gets a Honeypot section: sessions, login attempts, shell entries, top passwords / usernames / pairs / commands / downloaded URLs / SSH clients, recent commands and a timeline (also in `/api/summary` as `honeypot`) |
 | 🔕 **Less alert spam from low-and-slow** | A persistent scanner is reported once per window; the next slow alert for the same IP needs its failure count to double (or the attack to fade and return) |
 

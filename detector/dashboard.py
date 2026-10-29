@@ -110,6 +110,16 @@ def _ip_table(top_ips: List[dict], T: dict) -> str:
     return f"<table>{head}{''.join(body)}</table>"
 
 
+_TAG_KEYS = ("ssh_key", "miner", "download_exec", "botnet", "persistence", "passwd", "cleanup", "recon")
+
+
+def _tags(tags: List[str], T: dict) -> str:
+    return "".join(
+        f'<span class="tag {"b" if t in ("ssh_key", "miner", "botnet", "persistence", "passwd") else "t"}">'
+        f'{escape(T.get("hp_tag_" + t, t))}</span>' for t in tags if t in _TAG_KEYS
+    )
+
+
 def _render_honeypot(hp: Optional[dict], T: dict) -> str:
     if hp is None:
         return ""
@@ -127,7 +137,7 @@ def _render_honeypot(hp: Optional[dict], T: dict) -> str:
             f'<table><tr><th>{escape(T["hp_col_time"])}</th><th>IP</th><th>{escape(T["hp_col_cmd"])}</th></tr>'
             + "".join(
                 f'<tr><td>{escape(c["time"])}</td><td><code>{escape(c["ip"])}</code></td>'
-                f'<td><code>{escape(c["command"])}</code></td></tr>'
+                f'<td><code>{escape(c["command"])}</code>{_tags(c.get("tags", []), T)}</td></tr>'
                 for c in hp["recent_commands"]
             ) + "</table>"
         )
@@ -140,7 +150,9 @@ def _render_honeypot(hp: Optional[dict], T: dict) -> str:
         ("", T["hp_usernames"], _rows(hp["usernames"], T)),
         ("", T["hp_creds"], _rows(hp["credentials"], T)),
         ("", T["hp_top_ips"], _rows(hp["top_ips"], T)),
+        ("", T["hp_behaviours"], _rows([[T.get("hp_tag_" + k, k), v] for k, v in hp["behaviours"]], T)),
         ("", T["hp_top_cmds"], _rows(hp["commands"], T)),
+        ("", T["hp_hashes"], _rows(hp["hashes"], T)),
         ("", T["hp_urls"], _rows(hp["downloads"], T)),
         ("", T["hp_clients"], _rows(hp["clients"], T)),
         ("wide", T["hp_recent"], recent),

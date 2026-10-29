@@ -7,6 +7,7 @@ attacker-controlled text, so it is length-capped and the dashboard HTML-escapes 
 """
 
 import json
+import re
 from collections import Counter, deque
 from datetime import datetime
 from typing import Dict, Iterable, List, Optional
@@ -14,6 +15,22 @@ from typing import Dict, Iterable, List, Optional
 from .stats import _parse_ts, _timeline
 
 _MAX_TEXT = 120
+
+# Ordered (label key, pattern); a command can match several categories.
+BEHAVIOURS = (
+    ("ssh_key", re.compile(r"authorized_keys|ssh-(rsa|ed25519)|ecdsa-sha2|\.ssh\b", re.I)),
+    ("miner", re.compile(r"xmrig|minerd|cpuminer|stratum\+|monero|cryptonight|nanopool|moneroocean|/proc/cpuinfo.*(grep|model)", re.I)),
+    ("download_exec", re.compile(r"\b(wget|curl|tftp|ftpget|scp)\b|chmod\s+[+0-7]*x|\bsh\s+\S+\.sh|nohup", re.I)),
+    ("botnet", re.compile(r"busybox|mirai|/bin/\.\w+|\bgafgyt\b|\bbot\b", re.I)),
+    ("persistence", re.compile(r"crontab|/etc/cron|rc\.local|systemctl\s+(enable|start)|\.bashrc|useradd|adduser", re.I)),
+    ("passwd", re.compile(r"\bpasswd\b|chpasswd|usermod", re.I)),
+    ("cleanup", re.compile(r"rm\s+-\w*r\w*f|history\s+-c|unset\s+HISTFILE|HISTFILE=|/dev/null\s+2>&1\s*;?\s*rm", re.I)),
+    ("recon", re.compile(r"\b(uname|whoami|lscpu|nproc|uptime|hostname|ifconfig|lsb_release)\b|/proc/(cpuinfo|meminfo)|/etc/(os-release|passwd|issue)|free\s+-|\bid\b|\bw\b|\bls\b|\bps\b", re.I)),
+)
+
+
+def classify(command: str) -> List[str]:
+    return [name for name, rx in BEHAVIOURS if rx.search(command)]
 _RECENT_COMMANDS = 10
 
 
@@ -56,6 +73,8 @@ def summarize_honeypot(records: List[dict], since: Optional[datetime], until: da
     credentials: Counter = Counter()
     commands: Counter = Counter()
     downloads: Counter = Counter()
+    hashes: Counter = Counter()
+    behaviours: Counter = Counter()
     clients: Counter = Counter()
     ips: Counter = Counter()
     shell_ips = set()
@@ -83,9 +102,13 @@ def summarize_honeypot(records: List[dict], since: Optional[datetime], until: da
             command_count += 1
             cmd = _clip(r.get("input"))
             commands[cmd] += 1
-            recent.append({"time": r["_ts"].strftime("%m-%d %H:%M:%S"), "ip": ip, "command": cmd})
+            tags = classify(str(r.get("input") or ""))
+            behaviours.update(tags)
+            recent.append({"time": r["_ts"].strftime("%m-%d %H:%M:%S"), "ip": ip, "command": cmd, "tags": tags})
         elif event == "cowrie.session.file_download":
             downloads[_clip(r.get("url") or r.get("outfile"))] += 1
+            if re.fullmatch(r"[0-9a-fA-F]{64}", str(r.get("shasum") or "")):
+                hashes[str(r["shasum"]).lower()] += 1
         elif event == "cowrie.client.version":
             clients[_clip(r.get("version"))] += 1
 
@@ -106,6 +129,8 @@ def summarize_honeypot(records: List[dict], since: Optional[datetime], until: da
         "credentials": ranked(credentials),
         "commands": ranked(commands),
         "downloads": ranked(downloads),
+        "hashes": ranked(hashes),
+        "behaviours": ranked(behaviours),
         "clients": ranked(clients),
         "top_ips": ranked(ips),
         "shell_ips": sorted(shell_ips),
