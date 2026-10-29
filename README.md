@@ -13,6 +13,18 @@
  ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.13.1
 ```
 
+## 🍯 Works with Cowrie honeypot
+
+BRUTU$ reads [Cowrie](https://github.com/cowrie/cowrie) `cowrie.json` natively. Put Cowrie on port 22, move real SSH elsewhere, and every login attempt on the decoy becomes a `HONEYPOT` alert with GeoIP and threat-intel enrichment.
+
+```yaml
+log_files:
+  - path: /var/lib/cowrie/log/cowrie.json
+    type: cowrie
+```
+
+Step-by-step setup (Docker, moving real SSH to another port): [docs/DEPLOY.md](docs/DEPLOY.md).
+
 ---
 
 ## What's new in v1.13.1

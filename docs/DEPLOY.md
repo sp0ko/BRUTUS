@@ -161,3 +161,26 @@ zostałoby zablokowane. Prawdziwe blokowanie wymaga roota i `iptables`. Zanim je
 - zostaw otwarte drugie okno SSH na czas testu.
 
 Blokada adresu, z którego sam się łączysz, to najczęstszy sposób na zamknięcie sobie dostępu do serwera.
+
+## 10. Honeypot Cowrie (opcjonalnie)
+
+Cowrie udaje serwer SSH na porcie 22, a BRUTU$ czyta jego `cowrie.json` (parser `cowrie`, alerty `HONEYPOT`).
+
+1. Prawdziwy SSH przenieś na inny port. Przy `ssh.socket` (Ubuntu 24.04+) użyj drop-inu
+   `/etc/systemd/system/ssh.socket.d/port.conf`:
+   ```
+   [Socket]
+   ListenStream=
+   ListenStream=0.0.0.0:22222
+   ListenStream=[::]:22222
+   ```
+   Potem `sudo systemctl daemon-reload && sudo systemctl restart ssh.socket ssh.service`.
+   Zanim zamkniesz sesję, sprawdź w drugim oknie `ssh -p 22222 user@serwer` i otwórz port w firewallu dostawcy.
+2. Uruchom Cowrie w Dockerze:
+   ```bash
+   sudo docker run -d --name cowrie --restart unless-stopped -p 22:2222 \
+     -v /var/lib/cowrie/log:/cowrie/cowrie-git/var/log/cowrie \
+     --read-only --tmpfs /tmp --tmpfs /cowrie/cowrie-git/var/run \
+     --cap-drop ALL --security-opt no-new-privileges cowrie/cowrie:latest
+   ```
+3. Dodaj do `config.yaml` plik `/var/lib/cowrie/log/cowrie.json` z `type: cowrie` i zrestartuj BRUTU$.
