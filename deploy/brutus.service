@@ -27,7 +27,8 @@ RestartSec=5
 
 # Root is needed for the iptables blocker and for reading auth logs / the journal.
 # If you only detect and alert (blocker.enabled: false), run as an unprivileged
-# user in the 'adm' and 'systemd-journal' groups instead (User=brutus).
+# user instead (see docs/DEPLOY.md, "Usługa bez roota"):
+#   User=<your user>  and  SupplementaryGroups=adm systemd-journal
 User=root
 
 # Hardening
@@ -35,7 +36,8 @@ NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=/opt/brutus/reports /opt/brutus/logs
+# "-" = do not fail when a directory does not exist yet
+ReadWritePaths=-/opt/brutus/reports -/opt/brutus/logs
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_DAC_READ_SEARCH
 ProtectKernelModules=yes
 ProtectControlGroups=yes

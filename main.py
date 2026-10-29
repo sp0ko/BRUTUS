@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-BRUTU$ v1.11.0
+BRUTU$ v1.12.0
 =============
 Real-time SSH/RDP brute-force attack detector.
 
@@ -45,7 +45,7 @@ from utils.blocker import IPBlocker
 from utils.ip_utils import parse_cidr_list
 from utils.threat_intel import ThreatIntel
 
-VERSION = "1.11.0"
+VERSION = "1.12.0"
 DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "config.yaml")
 
 log = logging.getLogger("brute-force-detector")
@@ -384,7 +384,8 @@ def main() -> int:
     # ── Language selection ────────────────────────────────────────────────────
     lang = i18n.detect_lang_flag()
     if lang is None:
-        lang = i18n.select_language()
+        # No terminal (systemd, cron): do not wait for input, use English.
+        lang = i18n.select_language() if sys.stdin.isatty() else "en"
     i18n.set_lang(lang)
     T = i18n.get_T()
     print()
@@ -433,6 +434,8 @@ def main() -> int:
     )
     logger.info(T["tracker_info"],
                 tracker.threshold, tracker.time_window, tracker.alert_cooldown)
+    if tracker.slow_threshold:
+        logger.info(T["slow_info"], tracker.slow_threshold, tracker.slow_window)
 
     geo_cfg = cfg.get("geo", {})
     geo = GeoLocator(
@@ -639,14 +642,22 @@ def main() -> int:
     logger.info(T["lang_hint"])
     _start_lang_listener(stop_event)
 
+    # Active-IPs summary: at most once per stats_interval and only when it changed
+    # (0 = never), so an idle journal is not flooded.
+    stats_interval = float(log_cfg.get("stats_interval", 300) or 0)
+    last_summary, last_logged = None, 0.0
+
     try:
         while not stop_event.is_set():
             stop_event.wait(timeout=30)
             stats = tracker.get_stats()
-            if stats:
+            if stats and stats_interval:
                 top_ip = max(stats, key=lambda x: stats[x]["count"])
-                logger.info(i18n.get_T()["active_ips"],
-                            len(stats), top_ip, stats[top_ip]["count"])
+                summary = (len(stats), top_ip, stats[top_ip]["count"])
+                now = time.monotonic()
+                if summary != last_summary and now - last_logged >= stats_interval:
+                    logger.info(i18n.get_T()["active_ips"], *summary)
+                    last_summary, last_logged = summary, now
     finally:
         monitor.stop()
         if dashboard_server:

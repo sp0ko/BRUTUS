@@ -112,6 +112,7 @@ reports:
 
 logging:
   level: INFO
+  stats_interval: 300          # seconds between "Active IPs" summary lines (only when changed; 0 = off)
   # file: logs/detector.log
 
 # ── Offline IP reputation / Threat Intelligence ──────────────────────────────

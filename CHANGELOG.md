@@ -2,11 +2,14 @@
 
 All notable changes. The latest release is also summarised in the README.
 
-## Unreleased
+## v1.12.0
 
 | | |
 |---|---|
 | 🐌 **Low-and-slow detection** | `detection.slow_threshold` / `slow_window`: a second, long sliding window (e.g. 10 failures in 1 h) catches scanners that stay under `threshold`/`time_window`; off by default, state persisted across restarts |
+| 🔇 **Quieter log** | "Active IPs" summary logged at most every `logging.stats_interval` seconds (default 300) and only when changed; `0` disables it |
+| 🧑‍💻 **No prompt without a terminal** | Language prompt skipped (English) when stdin is not a TTY; startup log shows the low-and-slow settings |
+| 🛠 **Unit & docs** | `ReadWritePaths` tolerates missing directories; DEPLOY.md: running without root |
 
 ## v1.11.0
 

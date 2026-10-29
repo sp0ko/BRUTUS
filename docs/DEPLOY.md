@@ -108,6 +108,24 @@ ExecStart=/home/uzytkownik/BRUTUS/.venv/bin/python main.py --lang en --dashboard
 
 Zapisz, a potem `sudo systemctl restart brutus`.
 
+### Usługa bez roota
+
+Jeśli blocker jest wyłączony (`blocker.enabled: false`), usługa nie potrzebuje roota. Uruchomiona jako zwykły użytkownik zapisuje `reports/` na jego prawach, więc możesz je czytać i kopiować przez `scp` bez `sudo`:
+
+```bash
+sudo systemctl edit brutus
+```
+
+```
+[Service]
+User=ubuntu
+SupplementaryGroups=adm systemd-journal
+```
+
+Potem `sudo chown -R ubuntu: /home/ubuntu/BRUTUS/reports && sudo systemctl restart brutus`. Katalog `reports/` musi należeć do tego użytkownika. Przy włączonym blockerze zostaw `User=root`.
+
+Podsumowanie „Aktywne IP” w logu pojawia się najwyżej raz na `logging.stats_interval` sekund (domyślnie 300) i tylko po zmianie. `0` wyłącza je.
+
 ## 7. Dashboard z laptopa
 
 Dashboard nie ma logowania i słucha tylko na `127.0.0.1` serwera. **Nie zmieniaj tego.**

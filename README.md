@@ -10,19 +10,19 @@
  ██████╔╝██████╔╝██║   ██║   ██║   ██║   ██║███████╗
  ██╔══██╗██╔══██╗██║   ██║   ██║   ██║   ██║╚════██║
  ██████╔╝██║  ██║╚██████╔╝   ██║   ╚██████╔╝███████║
- ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.11.0
+ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.12.0
 ```
 
 ---
 
-## What's new in v1.11.0
+## What's new in v1.12.0
 
 | | |
 |---|---|
-| 🌍 **Offline GeoIP** | `--geoip-download` fetches a free database (`data/geoip.mmdb`, used automatically); `geo.online_fallback: false` forbids plain-HTTP lookups; `--check` hints when no local database exists |
-| 🚨 **Breach banner** | The dashboard highlights IPs that logged in successfully after failed attempts |
-| 🔌 **Dashboard port 8765** | New default (8080 is commonly taken) |
-| 📘 **Deployment guide** | [docs/DEPLOY.md](docs/DEPLOY.md): VPS with SSH keys, systemd, dashboard over an SSH tunnel (Polish) |
+| 🐌 **Low-and-slow detection** | `detection.slow_threshold` / `slow_window`: a second, long sliding window (e.g. 10 failures in 1 h) catches scanners that stay under `threshold`/`time_window`; off by default, persisted across restarts |
+| 🔇 **Quieter log** | The "Active IPs" line is logged at most every `logging.stats_interval` seconds (default 300) and only when it changed |
+| 🧑‍💻 **No prompt without a terminal** | Under systemd/cron the language prompt is skipped (English) instead of waiting for input; startup log shows the low-and-slow settings |
+| 🛠 **Unit & docs** | `ReadWritePaths` tolerates missing directories; [docs/DEPLOY.md](docs/DEPLOY.md) explains running without root |
 
 Older releases: see [CHANGELOG.md](CHANGELOG.md).
 
