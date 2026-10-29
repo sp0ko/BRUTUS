@@ -2,6 +2,12 @@
 
 All notable changes. The latest release is also summarised in the README.
 
+## v1.12.1
+
+| | |
+|---|---|
+| 📊 **Short report periods** | Dashboard buttons `1h` and `8h`; `--report --since 8h`; any period works in the URL (`?since=12h`) |
+
 ## v1.12.0
 
 | | |

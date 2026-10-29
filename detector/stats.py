@@ -15,7 +15,7 @@ _PERIOD_RE = re.compile(r"^(\d+)([hdw])$")
 _UNITS = {"h": "hours", "d": "days", "w": "weeks"}
 _USER_MARK = re.compile(r"\s*✓.*$")  # "root ✓ (UDANE LOGOWANIE)" → "root"
 
-PERIOD_CHOICES = ("24h", "7d", "30d", "all")
+PERIOD_CHOICES = ("1h", "8h", "24h", "7d", "30d", "all")
 
 
 def parse_period(value: str) -> Optional[timedelta]:

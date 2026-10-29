@@ -10,21 +10,18 @@
  ██████╔╝██████╔╝██║   ██║   ██║   ██║   ██║███████╗
  ██╔══██╗██╔══██╗██║   ██║   ██║   ██║   ██║╚════██║
  ██████╔╝██║  ██║╚██████╔╝   ██║   ╚██████╔╝███████║
- ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.12.0
+ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.12.1
 ```
 
 ---
 
-## What's new in v1.12.0
+## What's new in v1.12.1
 
 | | |
 |---|---|
-| 🐌 **Low-and-slow detection** | `detection.slow_threshold` / `slow_window`: a second, long sliding window (e.g. 10 failures in 1 h) catches scanners that stay under `threshold`/`time_window`; off by default, persisted across restarts |
-| 🔇 **Quieter log** | The "Active IPs" line is logged at most every `logging.stats_interval` seconds (default 300) and only when it changed |
-| 🧑‍💻 **No prompt without a terminal** | Under systemd/cron the language prompt is skipped (English) instead of waiting for input; startup log shows the low-and-slow settings |
-| 🛠 **Unit & docs** | `ReadWritePaths` tolerates missing directories; [docs/DEPLOY.md](docs/DEPLOY.md) explains running without root |
+| 📊 **Short report periods** | Dashboard buttons `1h` and `8h`; `--report --since 8h`; any period works in the URL (`?since=12h`) |
 
-Older releases: see [CHANGELOG.md](CHANGELOG.md).
+Also in v1.12.0: low-and-slow detection (`slow_threshold` / `slow_window`), quieter "Active IPs" log (`logging.stats_interval`), no language prompt without a terminal. Older releases: see [CHANGELOG.md](CHANGELOG.md).
 
 ---
 

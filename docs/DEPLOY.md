@@ -142,7 +142,10 @@ a czerwony baner ostrzega o udanym logowaniu po serii nieudanych prób.
 
 - **Kraje i adresy:** skąd przychodzą ataki, ile jest powtórzeń z jednej sieci.
 - **Loginy:** `root`, `admin`, `ubnt`, `pi`, `test` to klasyka słowników botów.
-- **Raport z historii:** `.venv/bin/python main.py --report --since 7d --format markdown`
+- **Raport z historii:** `.venv/bin/python main.py --report --since 8h` (też `1h`, `24h`, `7d`, `all`;
+  `--format html --output raport.html` daje stronę do otwarcia w przeglądarce)
+- **Dashboard z przyciskami okresów** (1h, 8h, 24h, 7d, 30d, all): zob. punkt 7; dowolny okres
+  wpiszesz w adresie, np. `http://127.0.0.1:8765/?since=12h`
 - **Powtórka na surowych logach:** `.venv/bin/python main.py --replay /var/log/auth.log` pokazuje,
   co BRUTU$ wykryłby w istniejącym pliku, bez blokowania i bez webhooków.
 

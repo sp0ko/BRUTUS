@@ -5,7 +5,7 @@ import unittest
 from datetime import datetime, timedelta
 
 import utils.i18n as i18n
-from detector.stats import (load_alerts, parse_period, render_markdown,
+from detector.stats import (PERIOD_CHOICES, load_alerts, parse_period, render_markdown,
                             render_text, summarize)
 
 i18n.set_lang("en")
@@ -32,6 +32,9 @@ class TestStats(unittest.TestCase):
 
     def test_parse_period(self):
         self.assertEqual(parse_period("24h"), timedelta(hours=24))
+        self.assertEqual(parse_period("8h"), timedelta(hours=8))
+        for preset in PERIOD_CHOICES:
+            parse_period(preset)
         self.assertEqual(parse_period("2w"), timedelta(weeks=2))
         self.assertIsNone(parse_period("all"))
         with self.assertRaises(ValueError):
