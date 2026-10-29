@@ -2,6 +2,12 @@
 
 All notable changes. The latest release is also summarised in the README.
 
+## v1.15.1
+
+| | |
+|---|---|
+| 🧭 **Official MITRE ATT&CK mapping** | Each honeypot command is matched to exact technique IDs (checked against attack.mitre.org), e.g. `uname` → T1082, `whoami` → T1033, `history -c` → T1070.003, `rm -rf` → T1070.004, authorized_keys → T1098.004, `chattr` → T1222.002. New techniques panel (ranked by distinct IPs) and clickable technique chips linking to attack.mitre.org |
+
 ## v1.15.0
 
 | | |

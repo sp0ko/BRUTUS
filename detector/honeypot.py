@@ -32,18 +32,42 @@ BEHAVIOURS = (
 )
 
 
-# MITRE ATT&CK technique per behaviour tag (https://attack.mitre.org/).
-MITRE = {
-    "recon": "T1082",
-    "ssh_key": "T1098.004",
-    "miner": "T1496",
-    "download_exec": "T1105",
-    "botnet": "T1059.004",
-    "persistence": "T1053.003",
-    "passwd": "T1098",
-    "perm_mod": "T1222.002",
-    "cleanup": "T1070",
-}
+# Official MITRE ATT&CK Enterprise techniques (https://attack.mitre.org/techniques/<ID>/),
+# matched per command.  IDs and names were checked against attack.mitre.org.
+TECHNIQUES = (
+    ("T1098.004", "Account Manipulation: SSH Authorized Keys",
+     re.compile(r"authorized_keys|ssh-(rsa|ed25519)|ecdsa-sha2", re.I)),
+    ("T1496.001", "Resource Hijacking: Compute Hijacking",
+     re.compile(r"xmrig|minerd|cpuminer|stratum\+|monero|cryptonight|nanopool", re.I)),
+    ("T1105", "Ingress Tool Transfer", re.compile(r"\b(wget|curl|tftp|ftpget|scp)\b", re.I)),
+    ("T1059.004", "Command and Scripting Interpreter: Unix Shell",
+     re.compile(r"(^|[;&|]\s*)(\./\S+|(ba)?sh\s+\S+\.sh)|nohup", re.I)),
+    ("T1222.002", "File and Directory Permissions Modification: Linux and Mac",
+     re.compile(r"\b(chattr|chmod|chown)\b", re.I)),
+    ("T1053.003", "Scheduled Task/Job: Cron", re.compile(r"crontab|/etc/cron", re.I)),
+    ("T1546.004", "Event Triggered Execution: Unix Shell Configuration Modification",
+     re.compile(r"\.bashrc|\.bash_profile|\.profile\b", re.I)),
+    ("T1543.002", "Create or Modify System Process: Systemd Service",
+     re.compile(r"systemctl\s+(enable|start)|/etc/systemd", re.I)),
+    ("T1136.001", "Create Account: Local Account", re.compile(r"\b(useradd|adduser)\b", re.I)),
+    ("T1098", "Account Manipulation", re.compile(r"\bpasswd\s+\S|chpasswd|usermod", re.I)),
+    ("T1070.003", "Indicator Removal: Clear Command History",
+     re.compile(r"history\s+-c|unset\s+HISTFILE|HISTFILE=", re.I)),
+    ("T1070.004", "Indicator Removal: File Deletion", re.compile(r"\brm\s+-\w*[rf]", re.I)),
+    ("T1082", "System Information Discovery",
+     re.compile(r"\b(uname|lscpu|nproc|uptime|hostname|lsb_release)\b|/proc/(cpuinfo|meminfo|version)|/etc/(os-release|issue)|\bfree\s+-", re.I)),
+    ("T1033", "System Owner/User Discovery", re.compile(r"\b(whoami|id|w|who|last)\b(?!\s*=)", re.I)),
+    ("T1083", "File and Directory Discovery", re.compile(r"\b(ls|pwd|find)\b", re.I)),
+    ("T1057", "Process Discovery", re.compile(r"\bps\b|\btop\b", re.I)),
+    ("T1016", "System Network Configuration Discovery", re.compile(r"\bifconfig\b|\bip\s+(a|addr|route)\b", re.I)),
+    ("T1087.001", "Account Discovery: Local Account", re.compile(r"/etc/passwd|getent\s+passwd", re.I)),
+)
+TECHNIQUE_NAMES = {tid: name for tid, name, _ in TECHNIQUES}
+
+
+def techniques(command: str) -> List[str]:
+    return [tid for tid, _, rx in TECHNIQUES if rx.search(command)]
+
 
 _MAX_CAMPAIGNS = 8
 
@@ -97,6 +121,7 @@ def summarize_honeypot(records: List[dict], since: Optional[datetime], until: da
     credentials: Counter = Counter()
     command_ips: Dict[str, set] = {}
     behaviour_ips: Dict[str, set] = {}
+    technique_ips: Dict[str, set] = {}
     campaigns: Dict[str, dict] = {}
     downloads: Counter = Counter()
     hashes: Counter = Counter()
@@ -130,16 +155,20 @@ def summarize_honeypot(records: List[dict], since: Optional[datetime], until: da
             raw = str(r.get("input") or "").strip()
             tags = classify(raw)
             command_ips.setdefault(cmd, set()).add(ip)
+            techs = techniques(raw)
             for tag in tags:
                 behaviour_ips.setdefault(tag, set()).add(ip)
+            for tid in techs:
+                technique_ips.setdefault(tid, set()).add(ip)
             camp = campaigns.setdefault(raw, {
-                "command": cmd, "ips": set(), "runs": 0, "tags": tags,
+                "command": cmd, "ips": set(), "runs": 0, "tags": tags, "techs": techs,
                 "first": r["_ts"], "last": r["_ts"],
             })
             camp["ips"].add(ip)
             camp["runs"] += 1
             camp["last"] = r["_ts"]
-            recent.append({"time": r["_ts"].strftime("%m-%d %H:%M:%S"), "ip": ip, "command": cmd, "tags": tags})
+            recent.append({"time": r["_ts"].strftime("%m-%d %H:%M:%S"), "ip": ip, "command": cmd, "tags": tags,
+                           "techs": techs})
         elif event == "cowrie.session.file_download":
             sha = str(r.get("shasum") or "")
             # Files built with echo/cat have no URL; say so instead of showing a local path.
@@ -156,6 +185,7 @@ def summarize_honeypot(records: List[dict], since: Optional[datetime], until: da
     # cannot drown out a campaign that hits from many addresses.
     commands = Counter({k: len(v) for k, v in command_ips.items()})
     behaviours = Counter({k: len(v) for k, v in behaviour_ips.items()})
+    technique_counts = Counter({k: len(v) for k, v in technique_ips.items()})
     campaign_list = sorted(
         (c for c in campaigns.values() if len(c["ips"]) >= 2 or any(t != "recon" for t in c["tags"])),
         key=lambda c: (-len(c["ips"]), -c["runs"], c["command"]),
@@ -164,7 +194,7 @@ def summarize_honeypot(records: List[dict], since: Optional[datetime], until: da
     return {
         "campaigns": [{
             "command": c["command"], "ips": len(c["ips"]), "runs": c["runs"], "tags": c["tags"],
-            "mitre": [MITRE[t] for t in c["tags"] if t in MITRE],
+            "mitre": c["techs"],
             "first": c["first"].strftime("%m-%d %H:%M"), "last": c["last"].strftime("%m-%d %H:%M"),
         } for c in campaign_list],
         "totals": {
@@ -182,6 +212,8 @@ def summarize_honeypot(records: List[dict], since: Optional[datetime], until: da
         "downloads": ranked(downloads),
         "hashes": ranked(hashes),
         "behaviours": ranked(behaviours),
+        "techniques": [[tid, TECHNIQUE_NAMES[tid], n] for tid, n in sorted(
+            technique_counts.items(), key=lambda kv: (-kv[1], kv[0]))[:top]],
         "clients": ranked(clients),
         "top_ips": ranked(ips),
         "shell_ips": sorted(shell_ips),

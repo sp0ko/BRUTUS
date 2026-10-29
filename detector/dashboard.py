@@ -16,7 +16,7 @@ from typing import Callable, List, Optional
 from urllib.parse import parse_qs, urlparse
 
 import utils.i18n as i18n
-from .honeypot import MITRE, load_cowrie, summarize_honeypot
+from .honeypot import TECHNIQUE_NAMES, load_cowrie, summarize_honeypot
 from .stats import PERIOD_CHOICES, load_alerts, parse_period, summarize
 
 log = logging.getLogger("brute-force-detector.dashboard")
@@ -48,7 +48,7 @@ main{padding:20px 24px;max-width:1200px;margin:0 auto}
 table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:5px 8px;border-bottom:1px solid #263040}
 th{color:#8b98a9;font-weight:600}td.n,th.n{text-align:right}
 code{color:#9cdcfe}.tag{display:inline-block;padding:0 6px;border-radius:4px;font-size:11px;margin-left:4px}
-.tag.b{background:#5c1f1f;color:#ff9b9b}.tag.t{background:#4d3b12;color:#f5c26b}
+.tag.m{background:#16304a;color:#7ab4f5;text-decoration:none}.tag.b{background:#5c1f1f;color:#ff9b9b}.tag.t{background:#4d3b12;color:#f5c26b}
 .status{margin-bottom:20px}.state{display:inline-block;padding:2px 8px;border-radius:999px;background:#263040}
 .state.running{color:#8be0a0;background:#173522}.state.error{color:#ff9b9b;background:#5c1f1f}
 .state.waiting,.state.starting{color:#f5c26b;background:#4d3b12}.error-text{color:#ff9b9b}
@@ -110,15 +110,39 @@ def _ip_table(top_ips: List[dict], T: dict) -> str:
     return f"<table>{head}{''.join(body)}</table>"
 
 
-_TAG_KEYS = tuple(MITRE)
+_TAG_KEYS = ("ssh_key", "miner", "download_exec", "botnet", "persistence", "passwd",
+             "perm_mod", "cleanup", "recon")
 _RED_TAGS = ("ssh_key", "miner", "botnet", "persistence", "passwd")
 
 
-def _tags(tags: List[str], T: dict) -> str:
-    return "".join(
-        f'<span class="tag {"b" if t in _RED_TAGS else "t"}" title="MITRE ATT&amp;CK {MITRE[t]}">'
-        f'{escape(T.get("hp_tag_" + t, t))} · {MITRE[t]}</span>' for t in tags if t in _TAG_KEYS
+def _mitre_url(tid: str) -> str:
+    return "https://attack.mitre.org/techniques/" + tid.replace(".", "/") + "/"
+
+
+def _tags(tags: List[str], T: dict, techs: Optional[List[str]] = None) -> str:
+    out = "".join(
+        f'<span class="tag {"b" if t in _RED_TAGS else "t"}">{escape(T.get("hp_tag_" + t, t))}</span>'
+        for t in tags if t in _TAG_KEYS
     )
+    # Only IDs from our fixed technique table are linked, never attacker-supplied text.
+    out += "".join(
+        f'<a class="tag m" href="{_mitre_url(t)}" target="_blank" rel="noopener noreferrer" '
+        f'title="{escape(TECHNIQUE_NAMES[t])}">{escape(t)}</a>'
+        for t in (techs or []) if t in TECHNIQUE_NAMES
+    )
+    return out
+
+
+def _technique_table(items: List[list], T: dict) -> str:
+    if not items:
+        return f'<p class="empty">{escape(T["rp_none"])}</p>'
+    head = f'<tr><th>ID</th><th>{escape(T["hp_col_tech"])}</th><th class="n">{escape(T["hp_col_ips"])}</th></tr>'
+    body = "".join(
+        f'<tr><td><a class="tag m" href="{_mitre_url(tid)}" target="_blank" rel="noopener noreferrer">'
+        f'{escape(tid)}</a></td><td>{escape(name)}</td><td class="n">{int(n)}</td></tr>'
+        for tid, name, n in items
+    )
+    return f"<table>{head}{body}</table>"
 
 
 def _campaigns(items: List[dict], T: dict) -> str:
@@ -127,7 +151,7 @@ def _campaigns(items: List[dict], T: dict) -> str:
     head = (f'<tr><th>{escape(T["hp_col_cmd"])}</th><th class="n">{escape(T["hp_col_ips"])}</th>'
             f'<th class="n">{escape(T["hp_col_runs"])}</th><th>{escape(T["hp_col_span"])}</th></tr>')
     body = "".join(
-        f'<tr><td><code>{escape(c["command"])}</code>{_tags(c["tags"], T)}</td>'
+        f'<tr><td><code>{escape(c["command"])}</code>{_tags(c["tags"], T, c["mitre"])}</td>'
         f'<td class="n">{int(c["ips"])}</td><td class="n">{int(c["runs"])}</td>'
         f'<td>{escape(c["first"])} → {escape(c["last"])}</td></tr>'
         for c in items
@@ -152,7 +176,7 @@ def _render_honeypot(hp: Optional[dict], T: dict) -> str:
             f'<table><tr><th>{escape(T["hp_col_time"])}</th><th>IP</th><th>{escape(T["hp_col_cmd"])}</th></tr>'
             + "".join(
                 f'<tr><td>{escape(c["time"])}</td><td><code>{escape(c["ip"])}</code></td>'
-                f'<td><code>{escape(c["command"])}</code>{_tags(c.get("tags", []), T)}</td></tr>'
+                f'<td><code>{escape(c["command"])}</code>{_tags(c.get("tags", []), T, c.get("techs"))}</td></tr>'
                 for c in hp["recent_commands"]
             ) + "</table>"
         )
@@ -166,8 +190,8 @@ def _render_honeypot(hp: Optional[dict], T: dict) -> str:
         ("", T["hp_creds"], _rows(hp["credentials"], T)),
         ("", T["hp_top_ips"], _rows(hp["top_ips"], T)),
         ("wide", T["hp_campaigns"], _campaigns(hp["campaigns"], T)),
-        ("", T["hp_behaviours"], _rows([[f'{T.get("hp_tag_" + k, k)} · {MITRE.get(k, "")}', v]
-                                        for k, v in hp["behaviours"]], T)),
+        ("wide", T["hp_techniques"], _technique_table(hp["techniques"], T)),
+        ("", T["hp_behaviours"], _rows([[T.get("hp_tag_" + k, k), v] for k, v in hp["behaviours"]], T)),
         ("", T["hp_top_cmds"], _rows(hp["commands"], T)),
         ("", T["hp_hashes"], _rows(hp["hashes"], T)),
         ("", T["hp_urls"], _rows(hp["downloads"], T)),

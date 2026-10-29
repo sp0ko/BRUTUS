@@ -10,7 +10,7 @@
  ██████╔╝██████╔╝██║   ██║   ██║   ██║   ██║███████╗
  ██╔══██╗██╔══██╗██║   ██║   ██║   ██║   ██║╚════██║
  ██████╔╝██║  ██║╚██████╔╝   ██║   ╚██████╔╝███████║
- ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.15.0
+ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.15.1
 ```
 
 ## 🍯 Works with Cowrie honeypot
@@ -27,10 +27,11 @@ Step-by-step setup (Docker, moving real SSH to another port): [docs/DEPLOY.md](d
 
 ---
 
-## What's new in v1.15.0
+## What's new in v1.15.1
 
 | | |
 |---|---|
+| 🧭 **Official MITRE ATT&CK mapping** | Each honeypot command is matched to exact technique IDs (checked against attack.mitre.org), e.g. `uname` → T1082, `whoami` → T1033, `history -c` → T1070.003, `rm -rf` → T1070.004, authorized_keys → T1098.004, `chattr` → T1222.002. New techniques panel (ranked by distinct IPs) and clickable technique chips linking to attack.mitre.org |
 | 🎯 **Campaigns & MITRE ATT&CK** | Honeypot "Top commands" and "Attacker behaviour" now count distinct IPs (one bot looping `uname` no longer drowns everything); new Campaigns panel groups the same command seen from many IPs; behaviour tags carry MITRE ATT&CK technique IDs (e.g. SSH key → T1098.004, recon → T1082); new `permission change` tag for `chattr` |
 | 🧹 **Cleaner honeypot stats** | Whitelisted IPs and this host are excluded from the honeypot section; empty passwords show as `(empty)`; echo-written files are labelled |
 | 🕵️ **Attacker behaviour** | Honeypot commands are tagged (SSH key, crypto miner, download & run, botnet, persistence, password change, cover tracks, recon) with a summary panel and tags in recent commands; downloaded files are listed by SHA256 for VirusTotal lookup |

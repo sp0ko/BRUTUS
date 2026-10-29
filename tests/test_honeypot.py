@@ -8,7 +8,7 @@ from datetime import datetime
 
 import utils.i18n as i18n
 from detector.dashboard import create_server
-from detector.honeypot import classify, load_cowrie, summarize_honeypot
+from detector.honeypot import TECHNIQUE_NAMES, classify, techniques, load_cowrie, summarize_honeypot
 
 i18n.set_lang("en")
 XSS = "<script>alert(1)</script>"
@@ -92,6 +92,18 @@ class TestHoneypot(unittest.TestCase):
         self.assertEqual((camp["ips"], camp["runs"]), (2, 2))
         self.assertIn("T1098.004", camp["mitre"])
         self.assertEqual([c["command"] for c in s["campaigns"]], [key])
+        self.assertEqual(s["techniques"][0][0], "T1098.004")
+
+    def test_techniques_match_official_ids(self):
+        self.assertEqual(techniques("uname -s -v -n -r -m"), ["T1082"])
+        self.assertEqual(techniques("whoami"), ["T1033"])
+        self.assertEqual(techniques("history -c"), ["T1070.003"])
+        self.assertEqual(techniques("rm -rf /tmp/x"), ["T1070.004"])
+        self.assertEqual(techniques("cd ~; chattr -ia .ssh"), ["T1222.002"])
+        self.assertEqual(techniques("cat /etc/passwd"), ["T1087.001"])
+        self.assertEqual(techniques("echo hello"), [])
+        self.assertIn("T1098.004", techniques('echo "ssh-rsa AAAA" >> .ssh/authorized_keys'))
+        self.assertTrue(all(n for n in TECHNIQUE_NAMES.values()))
 
     def test_chattr_is_permission_change(self):
         self.assertIn("perm_mod", classify("chattr -ia .ssh"))
