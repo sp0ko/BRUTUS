@@ -217,7 +217,51 @@ class TestWindowsEvtxParser(unittest.TestCase):
         self.assertGreater(ev.timestamp, 0)
 
 
+class TestCowrieParser(unittest.TestCase):
+
+    def setUp(self):
+        from detector.parsers.cowrie import CowrieParser
+        self.parser = CowrieParser()
+
+    @staticmethod
+    def _line(**kw):
+        import json
+        data = {"eventid": "cowrie.login.failed", "src_ip": "203.0.113.9", "username": "root",
+                "password": "123456", "timestamp": "2026-10-29T09:10:24.715546Z"}
+        data.update(kw)
+        return json.dumps(data)
+
+    def test_login_failed(self):
+        ev = self.parser.parse_line(self._line())
+        self.assertEqual((ev.event_type, ev.ip, ev.username, ev.attack_type),
+                         ("FAILED", "203.0.113.9", "root", "HONEYPOT"))
+
+    def test_honeypot_login_success_is_still_an_attack(self):
+        ev = self.parser.parse_line(self._line(eventid="cowrie.login.success"))
+        self.assertEqual(ev.event_type, "FAILED")
+
+    def test_timestamp_is_utc_event_time(self):
+        ev = self.parser.parse_line(self._line())
+        self.assertAlmostEqual(ev.timestamp, 1793265024.715546, places=3)
+
+    def test_ipv4_mapped_address_is_unwrapped(self):
+        self.assertEqual(self.parser.parse_line(self._line(src_ip="::ffff:198.51.100.7")).ip, "198.51.100.7")
+
+    def test_other_events_ignored(self):
+        for eid in ("cowrie.command.input", "cowrie.session.connect", "cowrie.session.closed"):
+            self.assertIsNone(self.parser.parse_line(self._line(eventid=eid)))
+
+    def test_garbage_and_incomplete_lines_ignored(self):
+        for line in ("", "not json", "{broken", "[1, 2]", '{"eventid": "cowrie.login.failed"}'):
+            self.assertIsNone(self.parser.parse_line(line))
+
+
 class TestParserRegistry(unittest.TestCase):
+
+    def test_get_cowrie_parser(self):
+        from detector.parsers import get_parser
+        from detector.parsers.cowrie import CowrieParser
+        self.assertIsInstance(get_parser("cowrie"), CowrieParser)
 
     def test_get_linux_parser(self):
         from detector.parsers import get_parser

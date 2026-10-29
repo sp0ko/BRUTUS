@@ -10,18 +10,18 @@
  ██████╔╝██████╔╝██║   ██║   ██║   ██║   ██║███████╗
  ██╔══██╗██╔══██╗██║   ██║   ██║   ██║   ██║╚════██║
  ██████╔╝██║  ██║╚██████╔╝   ██║   ╚██████╔╝███████║
- ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.12.1
+ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.13.0
 ```
 
 ---
 
-## What's new in v1.12.1
+## What's new in v1.13.0
 
 | | |
 |---|---|
-| 📊 **Short report periods** | Dashboard buttons `1h` and `8h`; `--report --since 8h`; any period works in the URL (`?since=12h`) |
+| 🍯 **Cowrie honeypot parser** | New log type `cowrie` reads the honeypot's `cowrie.json`: every login attempt (even the ones Cowrie lets through) counts as a `HONEYPOT` attack and goes through the same alerts, reports and dashboard; never reported as a breach |
 
-Also in v1.12.0: low-and-slow detection (`slow_threshold` / `slow_window`), quieter "Active IPs" log (`logging.stats_interval`), no language prompt without a terminal. Older releases: see [CHANGELOG.md](CHANGELOG.md).
+Also in v1.12.x: low-and-slow detection (`slow_threshold` / `slow_window`), quieter "Active IPs" log (`logging.stats_interval`), no language prompt without a terminal, dashboard/report periods `1h` and `8h`. Older releases: see [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -183,7 +183,7 @@ python main.py [options]
   --setup               Interactive setup wizard — writes the config file
   --check               Check config, permissions, ports and webhooks, then exit
   --log PATH            Additional log file to monitor
-  --type TYPE           Parser: linux_ssh | windows_evtx | nginx | apache | ftp | mysql
+  --type TYPE           Parser: linux_ssh | windows_evtx | nginx | apache | ftp | mysql | cowrie
   --threshold N         Number of attempts to trigger an alert
   --window N            Time window in seconds
   --cooldown N          Cooldown between alerts for the same IP
@@ -366,6 +366,7 @@ log_files:
 | `nginx` / `apache` | `401` **with a username** (Basic auth; a `401` without one is just the browser challenge and is ignored), error-log "password mismatch" / "user not found" (nginx, Apache `AH01617`/`AH01618`), `POST` to a login path (`/login`, `/admin`, `/administrator`, `/user/login`, phpMyAdmin…) answered `401`/`403`, `POST /wp-login.php` answered `200` | `POST /wp-login.php` → `302` |
 | `ftp` | vsftpd `FAIL LOGIN`, ProFTPD `Login failed` / `no such user`, Pure-FTPd `Authentication failed` | vsftpd `OK LOGIN`, ProFTPD `Login successful`, Pure-FTPd `is now logged in` |
 | `mysql` | `Access denied for user 'x'@'IP'` | — (the error log doesn't record successful logins) |
+| `cowrie` | [Cowrie](https://github.com/cowrie/cowrie) honeypot `cowrie.json`: `cowrie.login.failed` **and** `cowrie.login.success` (the honeypot accepts some passwords on purpose, so it is still an attack) — reported as `HONEYPOT` | — (never a breach) |
 
 Notes:
 - **Reverse proxy:** behind a proxy/CDN the logs contain the proxy's address. Configure real client IPs first (nginx `realip`, Apache `mod_remoteip`) — otherwise you would alert on (and block!) your own proxy. Use `whitelist` as a safety net.
@@ -596,6 +597,7 @@ BRUTU/
 │   │   ├── http_auth.py       ← nginx / Apache (Basic auth, login panels)
 │   │   ├── ftp.py             ← vsftpd / ProFTPD / Pure-FTPd
 │   │   ├── mysql.py           ← MySQL / MariaDB error log
+│   │   ├── cowrie.py          ← Cowrie honeypot (cowrie.json)
 │   │   └── windows_evtx.py    ← EVTX parser + live win32evtlog
 │   └── alerts/
 │       ├── console_alert.py   ← colored terminal output

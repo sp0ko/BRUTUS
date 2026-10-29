@@ -3,6 +3,7 @@ from .windows_evtx import WindowsEvtxParser
 from .http_auth import ApacheParser, NginxParser
 from .ftp import FtpParser
 from .mysql import MySQLParser
+from .cowrie import CowrieParser
 
 PARSER_REGISTRY = {
     "linux_ssh": LinuxSSHParser,
@@ -11,6 +12,7 @@ PARSER_REGISTRY = {
     "apache": ApacheParser,
     "ftp": FtpParser,
     "mysql": MySQLParser,
+    "cowrie": CowrieParser,
 }
 
 

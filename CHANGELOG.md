@@ -2,6 +2,12 @@
 
 All notable changes. The latest release is also summarised in the README.
 
+## v1.13.0
+
+| | |
+|---|---|
+| 🍯 **Cowrie honeypot parser** | New log type `cowrie` reads `cowrie.json`: `cowrie.login.failed` and `cowrie.login.success` both count as `HONEYPOT` attempts (the honeypot accepts some passwords on purpose); never a breach alert; other events ignored |
+
 ## v1.12.1
 
 | | |

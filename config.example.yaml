@@ -25,7 +25,7 @@ log_files:
   #   type: windows_evtx
   #   enabled: false
 
-  # Other services — parsers: nginx | apache | ftp | mysql
+  # Other services — parsers: nginx | apache | ftp | mysql | cowrie
   # - path: /var/log/nginx/access.log     # Basic auth + login panels (wp-login.php, /login, ...)
   #   type: nginx
   #   enabled: true
@@ -37,6 +37,9 @@ log_files:
   #   enabled: true
   # - path: /var/log/mysql/error.log      # MySQL/MariaDB "Access denied" (see README)
   #   type: mysql
+  #   enabled: true
+  # - path: /var/lib/cowrie/log/cowrie.json   # Cowrie honeypot (login attempts count as attacks)
+  #   type: cowrie
   #   enabled: true
 
 discord:
