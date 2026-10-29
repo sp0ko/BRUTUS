@@ -298,6 +298,35 @@ class TestSlowWindow(unittest.TestCase):
         t.reset_ip("6.6.6.6")
         self.assertIsNone(t.record_failed("6.6.6.6", "root"))
 
+    def _feed(self, t, ip, n, start, step=100):
+        alerts = []
+        for i in range(n):
+            a = t.record_failed(ip, "root", timestamp=start + i * step)
+            if a:
+                alerts.append(a)
+        return alerts
+
+    def test_slow_alert_repeats_only_after_count_doubles(self):
+        t = self._tracker(use_event_time=True)
+        start = time.time() - 3500
+        counts = [a.count for a in self._feed(t, "5.5.5.5", 34, start)]
+        self.assertEqual(counts, [10, 20])
+
+    def test_slow_alert_rearms_after_attack_fades(self):
+        t = self._tracker(use_event_time=True)
+        start = time.time() - 20000
+        self.assertEqual(len(self._feed(t, "4.4.4.4", 10, start, step=100)), 1)
+        # long pause: the window empties, a new wave alerts again
+        self.assertEqual(len(self._feed(t, "4.4.4.4", 10, start + 15000, step=100)), 1)
+
+    def test_slow_alerted_state_survives_export_import(self):
+        t = self._tracker(use_event_time=True)
+        start = time.time() - 1500
+        self.assertEqual(len(self._feed(t, "3.3.3.3", 10, start)), 1)
+        t2 = BruteForceTracker(threshold=5, time_window=60, alert_cooldown=0,
+                               slow_threshold=10, slow_window=3600, use_event_time=True)
+        t2.import_state(t.export_state())
+        self.assertEqual(self._feed(t2, "3.3.3.3", 5, start + 1000), [])
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -2,6 +2,12 @@
 
 All notable changes. The latest release is also summarised in the README.
 
+## v1.13.1
+
+| | |
+|---|---|
+| 🔕 **Less alert spam from low-and-slow** | A persistent scanner is reported once per window: the next slow alert for the same IP needs the failure count to double (or the attack to fade below `slow_threshold` and return). Before, the same IP re-alerted every `alert_cooldown` (17 alerts/hour from two IPs in a real deployment) |
+
 ## v1.13.0
 
 | | |

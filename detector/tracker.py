@@ -74,6 +74,8 @@ class BruteForceTracker:
         self._failed: Dict[str, deque] = defaultdict(deque)
         # same entries, kept for slow_window instead of time_window
         self._slow: Dict[str, deque] = defaultdict(deque)
+        # ip -> failures in the long window when its last slow alert fired
+        self._slow_alerted: Dict[str, int] = {}
         self._last_sweep = 0.0
         self._last_alert: Dict[str, float] = {}
         self._total_triggered: Dict[str, int] = defaultdict(int)
@@ -132,17 +134,21 @@ class BruteForceTracker:
                 self._total_triggered[ip] += 1
                 return self._build_event(ip, bucket, count, successful_login=False)
 
-            # Low and slow: threshold reached only over the long window
-            if (
-                slow_bucket is not None
-                and len(slow_bucket) >= self.slow_threshold
-                and self._cooldown_elapsed(ip, timestamp)
-            ):
-                self._last_alert[ip] = timestamp
-                self._total_triggered[ip] += 1
-                event = self._build_event(ip, slow_bucket, len(slow_bucket), successful_login=False)
-                event.time_window = self.slow_window
-                return event
+            # Low and slow: threshold reached only over the long window.  One alert per
+            # attacker; the next one only after the count doubles (or the attack faded
+            # below the threshold and came back).
+            if slow_bucket is not None:
+                n = len(slow_bucket)
+                last_n = self._slow_alerted.get(ip)
+                if n < self.slow_threshold:
+                    self._slow_alerted.pop(ip, None)
+                elif (last_n is None or n >= 2 * last_n) and self._cooldown_elapsed(ip, timestamp):
+                    self._last_alert[ip] = timestamp
+                    self._slow_alerted[ip] = n
+                    self._total_triggered[ip] += 1
+                    event = self._build_event(ip, slow_bucket, n, successful_login=False)
+                    event.time_window = self.slow_window
+                    return event
 
         return None
 
@@ -200,6 +206,9 @@ class BruteForceTracker:
                     ip: [list(e) for e in bucket if e[0] >= now - self.slow_window]
                     for ip, bucket in self._slow.items() if bucket
                 },
+                "slow_alerted": {
+                    ip: n for ip, n in self._slow_alerted.items() if self._slow.get(ip)
+                },
                 "failed": {
                     ip: [list(e) for e in bucket if e[0] >= now - self.time_window]
                     for ip, bucket in self._failed.items() if bucket
@@ -254,6 +263,9 @@ class BruteForceTracker:
                 bucket.extend(items)
                 if not bucket:
                     del self._slow[ip]
+            for ip, n in (data.get("slow_alerted") or {}).items():
+                if self.slow_threshold and isinstance(ip, str) and isinstance(n, int) and n > 0:
+                    self._slow_alerted[ip] = max(n, self._slow_alerted.get(ip, 0))
             for ip, t in (data.get("last_alert") or {}).items():
                 try:
                     t = float(t)
@@ -270,6 +282,7 @@ class BruteForceTracker:
         with self._lock:
             self._failed.pop(ip, None)
             self._slow.pop(ip, None)
+            self._slow_alerted.pop(ip, None)
             self._last_alert.pop(ip, None)
 
     # ------------------------------------------------------------------
@@ -286,6 +299,8 @@ class BruteForceTracker:
         self._last_sweep = now
         for ip in [i for i, b in self._slow.items() if not b or b[-1][0] < now - self.slow_window]:
             del self._slow[ip]
+        for ip in [i for i in self._slow_alerted if i not in self._slow]:
+            del self._slow_alerted[ip]
 
     def _cooldown_elapsed(self, ip: str, now: float) -> bool:
         last = self._last_alert.get(ip, 0.0)

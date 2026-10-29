@@ -10,18 +10,18 @@
  ██████╔╝██████╔╝██║   ██║   ██║   ██║   ██║███████╗
  ██╔══██╗██╔══██╗██║   ██║   ██║   ██║   ██║╚════██║
  ██████╔╝██║  ██║╚██████╔╝   ██║   ╚██████╔╝███████║
- ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.13.0
+ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝  $  v1.13.1
 ```
 
 ---
 
-## What's new in v1.13.0
+## What's new in v1.13.1
 
 | | |
 |---|---|
-| 🍯 **Cowrie honeypot parser** | New log type `cowrie` reads the honeypot's `cowrie.json`: every login attempt (even the ones Cowrie lets through) counts as a `HONEYPOT` attack and goes through the same alerts, reports and dashboard; never reported as a breach |
+| 🔕 **Less alert spam from low-and-slow** | A persistent scanner is reported once per window; the next slow alert for the same IP needs its failure count to double (or the attack to fade and return) |
 
-Also in v1.12.x: low-and-slow detection (`slow_threshold` / `slow_window`), quieter "Active IPs" log (`logging.stats_interval`), no language prompt without a terminal, dashboard/report periods `1h` and `8h`. Older releases: see [CHANGELOG.md](CHANGELOG.md).
+Also in v1.13.0: Cowrie honeypot log parser (`type: cowrie`) — every login attempt counts as a `HONEYPOT` attack, never as a breach. In v1.12.x: low-and-slow detection (`slow_threshold` / `slow_window`), quieter "Active IPs" log, dashboard/report periods `1h` and `8h`. Older releases: see [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -243,7 +243,7 @@ detection:
 
 ### Low-and-slow detection
 
-Scanners often stay under `threshold`/`time_window` with a couple of attempts every few minutes. `slow_threshold` adds a second, long window: when one IP reaches that many failures within `slow_window` seconds, a regular alert is raised (its `time_window` is `slow_window`). `0` disables it (the default when the key is missing).
+Scanners often stay under `threshold`/`time_window` with a couple of attempts every few minutes. `slow_threshold` adds a second, long window: when one IP reaches that many failures within `slow_window` seconds, a regular alert is raised (its `time_window` is `slow_window`). A persistent scanner is reported once; the next slow alert for the same IP comes only after its failure count in the window doubles, or after the attack faded below `slow_threshold` and returned. `0` disables it (the default when the key is missing).
 
 ```yaml
 detection:
