@@ -262,6 +262,8 @@ def run_replay(path: str, cfg: dict, args: argparse.Namespace, T: dict,
         alert_cooldown=det_cfg.get("alert_cooldown", 300),
         success_failure_threshold=det_cfg.get("success_failure_threshold", 3),
         spray_username_threshold=det_cfg.get("spray_username_threshold", 8),
+        slow_threshold=det_cfg.get("slow_threshold", 0),
+        slow_window=det_cfg.get("slow_window", 3600),
     )
     dispatcher = AlertDispatcher(
         console=ConsoleAlert(), discord=None, slack=None, report_manager=None,
@@ -426,6 +428,8 @@ def main() -> int:
         alert_cooldown=det_cfg.get("alert_cooldown", 300),
         success_failure_threshold=det_cfg.get("success_failure_threshold", 3),
         spray_username_threshold=det_cfg.get("spray_username_threshold", 8),
+        slow_threshold=det_cfg.get("slow_threshold", 0),
+        slow_window=det_cfg.get("slow_window", 3600),
     )
     logger.info(T["tracker_info"],
                 tracker.threshold, tracker.time_window, tracker.alert_cooldown)

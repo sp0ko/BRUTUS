@@ -8,6 +8,8 @@ detection:
   alert_cooldown: 300          # cooldown between alerts for the same IP (seconds)
   success_failure_threshold: 3 # min failures before a success counts as a breach
   spray_username_threshold: 8  # unique accounts from one IP = password spray alert
+  slow_threshold: 10           # low-and-slow: failures within slow_window that trigger an alert (0 = off)
+  slow_window: 3600            # long window (seconds) for slow_threshold
   action_on_threat_intel_match: block  # block / alert_only — overrides blocker for TI-matched IPs
 
 log_files:

@@ -250,5 +250,54 @@ class TestBruteForceTracker(unittest.TestCase):
         self.assertIsNone(alert)
 
 
+class TestSlowWindow(unittest.TestCase):
+
+    def _tracker(self, **kw):
+        return BruteForceTracker(threshold=5, time_window=60, alert_cooldown=0,
+                                 slow_threshold=10, slow_window=3600, **kw)
+
+    def test_slow_attack_triggers_long_window(self):
+        t = self._tracker(use_event_time=True)
+        now = time.time()
+        alert = None
+        for i in range(10):
+            alert = t.record_failed("9.9.9.9", "root", timestamp=now - 3000 + i * 300)
+        self.assertIsNotNone(alert)
+        self.assertEqual(alert.time_window, 3600)
+        self.assertEqual(alert.count, 10)
+
+    def test_slow_attack_ignored_when_disabled(self):
+        t = BruteForceTracker(threshold=5, time_window=60, alert_cooldown=0, use_event_time=True)
+        now = time.time()
+        for i in range(10):
+            self.assertIsNone(t.record_failed("9.9.9.9", "root", timestamp=now - 3000 + i * 300))
+
+    def test_old_failures_leave_long_window(self):
+        t = self._tracker(use_event_time=True)
+        now = time.time()
+        alert = None
+        for i in range(10):
+            alert = t.record_failed("8.8.8.8", "root", timestamp=now - 7200 + i * 500)
+        self.assertIsNone(alert)
+
+    def test_slow_state_survives_export_import(self):
+        t = self._tracker(use_event_time=True)
+        now = time.time()
+        for i in range(9):
+            t.record_failed("7.7.7.7", "root", timestamp=now - 2000 + i * 200)
+        t2 = self._tracker()
+        t2.import_state(t.export_state())
+        alert = t2.record_failed("7.7.7.7", "root")
+        self.assertIsNotNone(alert)
+        self.assertEqual(alert.count, 10)
+
+    def test_reset_ip_clears_slow_window(self):
+        t = self._tracker()
+        for _ in range(9):
+            t.record_failed("6.6.6.6", "root", timestamp=time.time() - 1000)
+        t.reset_ip("6.6.6.6")
+        self.assertIsNone(t.record_failed("6.6.6.6", "root"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

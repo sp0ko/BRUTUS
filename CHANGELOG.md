@@ -2,6 +2,12 @@
 
 All notable changes. The latest release is also summarised in the README.
 
+## Unreleased
+
+| | |
+|---|---|
+| 🐌 **Low-and-slow detection** | `detection.slow_threshold` / `slow_window`: a second, long sliding window (e.g. 10 failures in 1 h) catches scanners that stay under `threshold`/`time_window`; off by default, state persisted across restarts |
+
 ## v1.11.0
 
 | | |

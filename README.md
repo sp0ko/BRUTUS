@@ -244,6 +244,16 @@ detection:
   spray_username_threshold: 8   # unique usernames before spray alert
 ```
 
+### Low-and-slow detection
+
+Scanners often stay under `threshold`/`time_window` with a couple of attempts every few minutes. `slow_threshold` adds a second, long window: when one IP reaches that many failures within `slow_window` seconds, a regular alert is raised (its `time_window` is `slow_window`). `0` disables it (the default when the key is missing).
+
+```yaml
+detection:
+  slow_threshold: 10   # failures within slow_window
+  slow_window: 3600    # seconds
+```
+
 ---
 
 ## Active IP blocking (iptables)

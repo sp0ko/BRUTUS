@@ -54,9 +54,15 @@ class BruteForceTracker:
         success_failure_threshold: int = 3,
         spray_username_threshold: int = 8,
         use_event_time: bool = False,
+        slow_threshold: int = 0,
+        slow_window: int = 3600,
     ) -> None:
         self.threshold = threshold
         self.time_window = time_window
+        # Long window for "low and slow" attacks (few tries per minute, many per hour).
+        # slow_threshold = 0 disables it.
+        self.slow_threshold = max(0, int(slow_threshold or 0))
+        self.slow_window = max(int(slow_window or 0), time_window)
         self.alert_cooldown = alert_cooldown
         self.success_failure_threshold = success_failure_threshold
         self.spray_username_threshold = spray_username_threshold
@@ -66,6 +72,9 @@ class BruteForceTracker:
 
         # ip -> deque of (timestamp, username, attack_type, log_source)
         self._failed: Dict[str, deque] = defaultdict(deque)
+        # same entries, kept for slow_window instead of time_window
+        self._slow: Dict[str, deque] = defaultdict(deque)
+        self._last_sweep = 0.0
         self._last_alert: Dict[str, float] = {}
         self._total_triggered: Dict[str, int] = defaultdict(int)
         self._lock = threading.Lock()
@@ -93,7 +102,15 @@ class BruteForceTracker:
         with self._lock:
             bucket = self._failed[ip]
             bucket.append((timestamp, username, attack_type, log_source))
-            self._evict_old(bucket, timestamp if use_event_time else time.time())
+            now = timestamp if use_event_time else time.time()
+            self._evict_old(bucket, now)
+
+            slow_bucket = None
+            if self.slow_threshold:
+                slow_bucket = self._slow[ip]
+                slow_bucket.append((timestamp, username, attack_type, log_source))
+                self._evict_old(slow_bucket, now, self.slow_window)
+                self._sweep(now)
 
             count = len(bucket)
             unique_users = len({e[1] for e in bucket if e[1]})
@@ -115,6 +132,18 @@ class BruteForceTracker:
                 self._total_triggered[ip] += 1
                 return self._build_event(ip, bucket, count, successful_login=False)
 
+            # Low and slow: threshold reached only over the long window
+            if (
+                slow_bucket is not None
+                and len(slow_bucket) >= self.slow_threshold
+                and self._cooldown_elapsed(ip, timestamp)
+            ):
+                self._last_alert[ip] = timestamp
+                self._total_triggered[ip] += 1
+                event = self._build_event(ip, slow_bucket, len(slow_bucket), successful_login=False)
+                event.time_window = self.slow_window
+                return event
+
         return None
 
     def record_success(
@@ -135,7 +164,6 @@ class BruteForceTracker:
 
             relevant_cutoff = timestamp - self.time_window * 2
             recent = [e for e in bucket if e[0] >= relevant_cutoff]
-
             if len(recent) >= self.success_failure_threshold:
                 augmented = list(recent)
                 augmented.append((timestamp, f"{username} ✓ (UDANE LOGOWANIE)", attack_type, log_source))
@@ -168,6 +196,10 @@ class BruteForceTracker:
         now = time.time()
         with self._lock:
             return {
+                "slow": {
+                    ip: [list(e) for e in bucket if e[0] >= now - self.slow_window]
+                    for ip, bucket in self._slow.items() if bucket
+                },
                 "failed": {
                     ip: [list(e) for e in bucket if e[0] >= now - self.time_window]
                     for ip, bucket in self._failed.items() if bucket
@@ -204,6 +236,24 @@ class BruteForceTracker:
                 bucket.extend(items)
                 if not bucket:
                     del self._failed[ip]
+            for ip, entries in (data.get("slow") or {}).items():
+                if not self.slow_threshold or not isinstance(ip, str) or not isinstance(entries, list):
+                    continue
+                bucket = self._slow[ip]
+                known = set(bucket)
+                for e in entries:
+                    try:
+                        ts, user, atype, src = float(e[0]), str(e[1]), str(e[2]), str(e[3])
+                    except (TypeError, ValueError, IndexError):
+                        continue
+                    if ts < now - self.slow_window or ts > now + 60 or (ts, user, atype, src) in known:
+                        continue
+                    bucket.append((ts, user, atype, src))
+                items = sorted(bucket, key=lambda e: e[0])
+                bucket.clear()
+                bucket.extend(items)
+                if not bucket:
+                    del self._slow[ip]
             for ip, t in (data.get("last_alert") or {}).items():
                 try:
                     t = float(t)
@@ -219,14 +269,23 @@ class BruteForceTracker:
     def reset_ip(self, ip: str) -> None:
         with self._lock:
             self._failed.pop(ip, None)
+            self._slow.pop(ip, None)
             self._last_alert.pop(ip, None)
 
     # ------------------------------------------------------------------
 
-    def _evict_old(self, bucket: deque, now: float) -> None:
-        cutoff = now - self.time_window
+    def _evict_old(self, bucket: deque, now: float, window: Optional[float] = None) -> None:
+        cutoff = now - (self.time_window if window is None else window)
         while bucket and bucket[0][0] < cutoff:
             bucket.popleft()
+
+    def _sweep(self, now: float) -> None:
+        """Drop idle long-window buckets so they do not accumulate."""
+        if now - self._last_sweep < 600:
+            return
+        self._last_sweep = now
+        for ip in [i for i, b in self._slow.items() if not b or b[-1][0] < now - self.slow_window]:
+            del self._slow[ip]
 
     def _cooldown_elapsed(self, ip: str, now: float) -> bool:
         last = self._last_alert.get(ip, 0.0)
