@@ -2,7 +2,7 @@
 
 All notable changes. The latest release is also summarised in the README.
 
-## Unreleased
+## v1.16.0
 
 | | |
 |---|---|
