@@ -2,6 +2,12 @@
 
 All notable changes. The latest release is also summarised in the README.
 
+## Unreleased
+
+| | |
+|---|---|
+| 🦠 **File reputation (VirusTotal)** | Optional (`file_intel`, off by default): SHA256 hashes of files captured by the Cowrie honeypot are looked up on VirusTotal in the background (only the hash is sent, rate limited to the free quota, cached in `reports/file_intel.json`). Shown in the dashboard Files panel, in `--report` (html / json / markdown / text, from the cache) and as a Discord/Slack alert when enough engines flag a file as malicious. Files uploaded with scp/sftp (`cowrie.session.file_upload`) now count too |
+
 ## v1.15.1
 
 | | |

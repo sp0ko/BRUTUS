@@ -25,6 +25,8 @@ log_files:
 
 Step-by-step setup (Docker, moving real SSH to another port): [docs/DEPLOY.md](docs/DEPLOY.md).
 
+**File reputation (optional).** Files the honeypot captures are looked up on VirusTotal by SHA256 (the file itself is never sent) and the detection count appears in the dashboard, in `--report` and as a Discord/Slack alert. Enable it with `file_intel.enabled: true` and a free API key in the `VT_API_KEY` environment variable (see `config.example.yaml`). Lookups run in the background within the free quota (4/min, 500/day) and are cached; `--report` only reads that cache.
+
 ---
 
 ## What's new in v1.15.1

@@ -26,7 +26,7 @@ import signal
 import sys
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 import yaml
@@ -44,6 +44,7 @@ from utils.geo import GeoLocator
 from utils.blocker import IPBlocker
 from utils.ip_utils import local_addresses, parse_cidr_list
 from utils.threat_intel import ThreatIntel
+from utils.file_intel import FileIntel, describe
 
 VERSION = "1.15.1"
 DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "config.yaml")
@@ -196,6 +197,41 @@ class AlertDispatcher:
 
 # ──────────────────────────────────────────────────────────────────────────────
 
+def cowrie_paths(cfg: dict) -> list:
+    return [f["path"] for f in cfg.get("log_files", [])
+            if f.get("enabled", True) and f.get("type") == "cowrie" and f.get("path")]
+
+
+def build_file_intel(cfg: dict, T: dict, discord: Optional[DiscordAlert] = None,
+                     slack: Optional[SlackAlert] = None, alerts: bool = True) -> Optional[FileIntel]:
+    """VirusTotal lookups for honeypot files; None when disabled or no API key."""
+    fi_cfg = cfg.get("file_intel") or {}
+    if not fi_cfg.get("enabled", False):
+        return None
+    key = os.environ.get("VT_API_KEY") or str(fi_cfg.get("api_key") or "")
+    if not key:
+        log.warning(T["fi_no_key"])
+        return None
+
+    def on_malicious(sha: str, verdict: dict) -> None:
+        log.warning(T["fi_alert_log"], sha, describe(verdict))
+        for handler in (discord, slack):
+            if handler:
+                threading.Thread(target=handler.send_file, args=(sha, verdict), daemon=True).start()
+
+    cache = fi_cfg.get("cache_path", "reports/file_intel.json")
+    intel = FileIntel(
+        api_key=key,
+        cache_path=cache,
+        requests_per_minute=int(fi_cfg.get("requests_per_minute", 4)),
+        daily_limit=int(fi_cfg.get("daily_limit", 500)),
+        alert_min_detections=int(fi_cfg.get("alert_min_detections", 5)),
+        on_malicious=on_malicious if alerts else None,
+    )
+    log.info(T["fi_on"], cache)
+    return intel
+
+
 def print_blocked(blocker: IPBlocker, T: dict) -> None:
     rows = blocker.get_blocked()
     if not rows:
@@ -346,23 +382,29 @@ def build_arg_parser(T: dict) -> argparse.ArgumentParser:
     return p
 
 
-def run_report(path: str, args: argparse.Namespace, T: dict) -> int:
+def run_report(path: str, args: argparse.Namespace, T: dict,
+               honeypot_paths: Optional[list] = None, honeypot_exclude: Optional[list] = None,
+               file_intel: Optional[FileIntel] = None) -> int:
     import json as _json
-    from detector.dashboard import build_summary, render_html
-    from detector.stats import render_markdown, render_text
+    from detector.dashboard import build_honeypot_summary, build_summary, render_html
+    from detector.stats import render_files_markdown, render_files_text, render_markdown, render_text
     try:
         summary = build_summary(path, args.since)
+        honeypot = None
+        if honeypot_paths and file_intel is not None:
+            honeypot = build_honeypot_summary(honeypot_paths, args.since, exclude_nets=honeypot_exclude,
+                                              file_intel=file_intel)
     except (ValueError, OSError) as exc:
         print(T["report_err"] % exc, file=sys.stderr)
         return 1
     if args.format == "json":
-        out = _json.dumps(summary, ensure_ascii=False, indent=2)
+        out = _json.dumps(dict(summary, honeypot=honeypot) if honeypot else summary, ensure_ascii=False, indent=2)
     elif args.format == "markdown":
-        out = render_markdown(summary, T)
+        out = render_markdown(summary, T) + (render_files_markdown(honeypot, T) if honeypot else "")
     elif args.format == "html":
-        out = render_html(summary, T, period=args.since, links=False)
+        out = render_html(summary, T, period=args.since, links=False, honeypot=honeypot)
     else:
-        out = render_text(summary, T)
+        out = render_text(summary, T) + (render_files_text(honeypot, T) if honeypot else "")
     if args.output:
         try:
             with open(args.output, "w", encoding="utf-8") as fh:
@@ -541,7 +583,11 @@ def main() -> int:
 
     report_path = (cfg.get("reports") or {}).get("output_path", "reports/alerts.jsonl")
     if args.report:
-        return run_report(report_path, args, T)
+        # Reports read the verdict cache only (filled by the running service); they never call VirusTotal.
+        return run_report(report_path, args, T,
+                          honeypot_paths=cowrie_paths(cfg),
+                          honeypot_exclude=whitelist + parse_cidr_list(sorted(local_addresses())),
+                          file_intel=build_file_intel(cfg, T, alerts=False))
 
     if args.replay:
         return run_replay(args.replay, cfg, args, T, threat_intel)
@@ -602,6 +648,9 @@ def main() -> int:
     else:
         logger.info(T["journald_disabled"])
 
+    file_intel = build_file_intel(cfg, T, discord_alert, slack_alert)
+    honeypot_exclude = whitelist + parse_cidr_list(sorted(local_addresses()))
+
     dashboard_server = None
     dashboard_thread = None
     if args.dashboard:
@@ -612,7 +661,8 @@ def main() -> int:
                 status_provider=monitor.get_status,
                 honeypot_paths=[f["path"] for f in log_files
                                 if f.get("type") == "cowrie" and f.get("path")],
-                honeypot_exclude=whitelist + parse_cidr_list(sorted(local_addresses())),
+                honeypot_exclude=honeypot_exclude,
+                file_intel=file_intel,
             )
         except OSError as exc:
             print(T["dash_err"] % exc, file=sys.stderr)
@@ -621,6 +671,8 @@ def main() -> int:
             print(T["dash_exposed"] % args.dashboard_host, file=sys.stderr)
 
     monitor.start()
+    if file_intel:
+        file_intel.start()
     if persister:
         persister.start()
     if dashboard_server:
@@ -649,10 +701,21 @@ def main() -> int:
     # (0 = never), so an idle journal is not flooded.
     stats_interval = float(log_cfg.get("stats_interval", 300) or 0)
     last_summary, last_logged = None, 0.0
+    last_file_scan = 0.0
 
     try:
         while not stop_event.is_set():
             stop_event.wait(timeout=30)
+            if file_intel and time.monotonic() - last_file_scan >= 300:
+                last_file_scan = time.monotonic()
+                try:
+                    from detector.honeypot import load_cowrie, summarize_honeypot
+                    now_utc = datetime.utcnow()
+                    since = now_utc - timedelta(days=1)
+                    summarize_honeypot(load_cowrie(cowrie_paths(cfg), since, honeypot_exclude),
+                                       since, now_utc, top=50, file_intel=file_intel)
+                except OSError as exc:
+                    logger.warning("File intel: cannot scan honeypot log: %s", exc)
             stats = tracker.get_stats()
             if stats and stats_interval:
                 top_ip = max(stats, key=lambda x: stats[x]["count"])
@@ -663,6 +726,8 @@ def main() -> int:
                     last_summary, last_logged = summary, now
     finally:
         monitor.stop()
+        if file_intel:
+            file_intel.stop()
         if dashboard_server:
             dashboard_server.shutdown()
             dashboard_server.server_close()

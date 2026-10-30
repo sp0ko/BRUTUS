@@ -271,3 +271,25 @@ def render_markdown(summary: dict, T: dict) -> str:
     table(f"{T['rp_timeline']} ({summary['timeline']['granularity']})",
           summary["timeline"]["buckets"], T["rp_col_period"])
     return "\n".join(out) + "\n"
+
+
+def render_files_text(honeypot: dict, T: dict) -> str:
+    from utils.file_intel import describe
+    out = ["", T["rp_files"], "-" * len(T["rp_files"])]
+    if not honeypot["hashes"]:
+        out.append(f"  {T['rp_none']}")
+    for sha, n in honeypot["hashes"]:
+        out.append(f"  {sha}  x{n}  {describe(honeypot['hash_intel'].get(sha)) or T['hp_vt_pending']}")
+    return "\n".join(out) + "\n"
+
+
+def render_files_markdown(honeypot: dict, T: dict) -> str:
+    from utils.file_intel import describe, vt_gui_url
+    out = ["", f"## {T['rp_files']}", ""]
+    if not honeypot["hashes"]:
+        return "\n".join(out + [f"_{T['rp_none']}_"]) + "\n"
+    out += [f"| SHA256 | {T['hp_col_runs']} | {T['hp_col_vt']} |", "|---|---:|---|"]
+    for sha, n in honeypot["hashes"]:
+        verdict = describe(honeypot["hash_intel"].get(sha)) or T["hp_vt_pending"]
+        out.append(f"| [`{sha}`]({vt_gui_url(sha)}) | {n} | {_md(verdict)} |")
+    return "\n".join(out) + "\n"

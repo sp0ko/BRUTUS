@@ -30,6 +30,32 @@ class DiscordAlert:
             print(f"[Discord] Send error: {exc}")
             return False
 
+    def send_file(self, sha: str, verdict: dict) -> bool:
+        try:
+            resp = requests.post(self._url, json=self._build_file_payload(sha, verdict), timeout=self._timeout)
+            resp.raise_for_status()
+            return True
+        except requests.RequestException as exc:
+            print(f"[Discord] Send error: {exc}")
+            return False
+
+    def _build_file_payload(self, sha: str, verdict: dict) -> dict:
+        T = i18n.get_T()
+        fields = [{"name": T["fi_f_hash"], "value": f"`{sha}`", "inline": False}]
+        if verdict.get("label"):
+            fields.append({"name": T["fi_f_label"], "value": _trunc(str(verdict["label"]), 256), "inline": True})
+        return {
+            "username": "BRUTU$",
+            "embeds": [{
+                "title": T["fi_title"],
+                "description": T["fi_desc"].format(bad=verdict.get("malicious", 0), total=verdict.get("total", 0)),
+                "color": self._COLOR_CRITICAL,
+                "url": f"https://www.virustotal.com/gui/file/{sha}",
+                "fields": fields,
+                "footer": {"text": "BRUTU$ • SSH/RDP Brute-Force Detector"},
+            }],
+        }
+
     def _build_payload(self, event: AlertEvent, geo: Optional[dict]) -> dict:
         T      = i18n.get_T()
         ts_iso = datetime.utcfromtimestamp(event.last_seen).isoformat() + "Z"

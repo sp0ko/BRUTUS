@@ -115,7 +115,7 @@ def load_cowrie(paths: Iterable[str], since: Optional[datetime] = None,
 
 
 def summarize_honeypot(records: List[dict], since: Optional[datetime], until: datetime,
-                       top: int = 10) -> Dict:
+                       top: int = 10, file_intel=None) -> Dict:
     passwords: Counter = Counter()
     usernames: Counter = Counter()
     credentials: Counter = Counter()
@@ -175,6 +175,10 @@ def summarize_honeypot(records: List[dict], since: Optional[datetime], until: da
             downloads[_clip(r.get("url")) or f"(written in shell) {sha[:12]}"] += 1
             if re.fullmatch(r"[0-9a-fA-F]{64}", str(r.get("shasum") or "")):
                 hashes[str(r["shasum"]).lower()] += 1
+        elif event == "cowrie.session.file_upload":
+            # scp/sftp drops (e.g. a dropper) carry a hash too but are not URL downloads.
+            if re.fullmatch(r"[0-9a-fA-F]{64}", str(r.get("shasum") or "")):
+                hashes[str(r["shasum"]).lower()] += 1
         elif event == "cowrie.client.version":
             clients[_clip(r.get("version"))] += 1
 
@@ -190,6 +194,16 @@ def summarize_honeypot(records: List[dict], since: Optional[datetime], until: da
         (c for c in campaigns.values() if len(c["ips"]) >= 2 or any(t != "recon" for t in c["tags"])),
         key=lambda c: (-len(c["ips"]), -c["runs"], c["command"]),
     )[:_MAX_CAMPAIGNS]
+
+    ranked_hashes = ranked(hashes)
+    hash_intel: Optional[Dict[str, dict]] = None  # None = file reputation lookups are off
+    if file_intel is not None:
+        hash_intel = {}
+        file_intel.submit(sha for sha, _ in ranked_hashes)
+        for sha, _ in ranked_hashes:
+            verdict = file_intel.lookup(sha)
+            if verdict:
+                hash_intel[sha] = verdict
 
     return {
         "campaigns": [{
@@ -210,7 +224,8 @@ def summarize_honeypot(records: List[dict], since: Optional[datetime], until: da
         "credentials": ranked(credentials),
         "commands": ranked(commands),
         "downloads": ranked(downloads),
-        "hashes": ranked(hashes),
+        "hashes": ranked_hashes,
+        "hash_intel": hash_intel,
         "behaviours": ranked(behaviours),
         "techniques": [[tid, TECHNIQUE_NAMES[tid], n] for tid, n in sorted(
             technique_counts.items(), key=lambda kv: (-kv[1], kv[0]))[:top]],

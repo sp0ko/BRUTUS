@@ -16,6 +16,7 @@ from typing import Callable, List, Optional
 from urllib.parse import parse_qs, urlparse
 
 import utils.i18n as i18n
+from utils.file_intel import vt_gui_url
 from .honeypot import TECHNIQUE_NAMES, load_cowrie, summarize_honeypot
 from .stats import PERIOD_CHOICES, load_alerts, parse_period, summarize
 
@@ -48,7 +49,7 @@ main{padding:20px 24px;max-width:1200px;margin:0 auto}
 table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:5px 8px;border-bottom:1px solid #263040}
 th{color:#8b98a9;font-weight:600}td.n,th.n{text-align:right}
 code{color:#9cdcfe}.tag{display:inline-block;padding:0 6px;border-radius:4px;font-size:11px;margin-left:4px}
-.tag.m{background:#16304a;color:#7ab4f5;text-decoration:none}.tag.b{background:#5c1f1f;color:#ff9b9b}.tag.t{background:#4d3b12;color:#f5c26b}
+.tag.m{background:#16304a;color:#7ab4f5;text-decoration:none}.tag.b{background:#5c1f1f;color:#ff9b9b}.tag.t{background:#4d3b12;color:#f5c26b}.tag.ok{background:#173d2a;color:#7be0a8}
 .status{margin-bottom:20px}.state{display:inline-block;padding:2px 8px;border-radius:999px;background:#263040}
 .state.running{color:#8be0a0;background:#173522}.state.error{color:#ff9b9b;background:#5c1f1f}
 .state.waiting,.state.starting{color:#f5c26b;background:#4d3b12}.error-text{color:#ff9b9b}
@@ -159,9 +160,35 @@ def _campaigns(items: List[dict], T: dict) -> str:
     return f"<table>{head}{body}</table>"
 
 
+def _verdict(result: Optional[dict], T: dict) -> str:
+    if result is None:
+        return f'<span class="tag t">{escape(T["hp_vt_pending"])}</span>'
+    if result.get("status") != "found":
+        return f'<span class="tag t">{escape(T["hp_vt_unknown"])}</span>'
+    bad = int(result.get("malicious", 0))
+    text = f'{bad}/{int(result.get("total", 0))}'
+    label = f' {escape(str(result["label"]))}' if result.get("label") else ""
+    return f'<span class="tag {"b" if bad else "ok"}">{text}</span>{label}'
+
+
+def _files(hp: dict, T: dict, intel_on: bool) -> str:
+    if not hp["hashes"]:
+        return f'<p class="empty">{escape(T["rp_none"])}</p>'
+    head = f'<tr><th>SHA256</th><th class="n">{escape(T["hp_col_runs"])}</th>'
+    head += f'<th>{escape(T["hp_col_vt"])}</th></tr>' if intel_on else "</tr>"
+    body = ""
+    for sha, n in hp["hashes"]:
+        link = (f'<a class="tag m" href="{escape(vt_gui_url(sha))}" target="_blank" '
+                f'rel="noopener noreferrer">VT</a>')
+        verdict = f'<td>{_verdict(hp["hash_intel"].get(sha), T)}</td>' if intel_on else ""
+        body += f'<tr><td><code title="{escape(sha)}">{escape(sha[:16])}…</code>{link}</td><td class="n">{int(n)}</td>{verdict}</tr>'
+    return f"<table>{head}{body}</table>"
+
+
 def _render_honeypot(hp: Optional[dict], T: dict) -> str:
     if hp is None:
         return ""
+    intel_on = hp.get("hash_intel") is not None
     t = hp["totals"]
     cards = "".join(
         f'<div class="card {cls}"><b>{int(t[key])}</b>{escape(T[label])}</div>'
@@ -193,7 +220,7 @@ def _render_honeypot(hp: Optional[dict], T: dict) -> str:
         ("wide", T["hp_techniques"], _technique_table(hp["techniques"], T)),
         ("", T["hp_behaviours"], _rows([[T.get("hp_tag_" + k, k), v] for k, v in hp["behaviours"]], T)),
         ("", T["hp_top_cmds"], _rows(hp["commands"], T)),
-        ("", T["hp_hashes"], _rows(hp["hashes"], T)),
+        ("wide" if intel_on else "", T["hp_hashes"], _files(hp, T, intel_on)),
         ("", T["hp_urls"], _rows(hp["downloads"], T)),
         ("", T["hp_clients"], _rows(hp["clients"], T)),
         ("wide", T["hp_recent"], recent),
@@ -319,11 +346,12 @@ def build_summary(path: str, period: str, top: int = 10) -> dict:
 
 
 def build_honeypot_summary(paths: List[str], period: str, top: int = 10,
-                           exclude_nets: Optional[list] = None) -> dict:
+                           exclude_nets: Optional[list] = None, file_intel=None) -> dict:
     delta = parse_period(period)
     until = datetime.utcnow()
     since = until - delta if delta else None
-    return summarize_honeypot(load_cowrie(paths, since, exclude_nets), since, until, top=top)
+    return summarize_honeypot(load_cowrie(paths, since, exclude_nets), since, until, top=top,
+                              file_intel=file_intel)
 
 
 def is_loopback(host: str) -> bool:
@@ -342,6 +370,7 @@ def create_server(
     status_provider: Optional[Callable[[], dict]] = None,
     honeypot_paths: Optional[List[str]] = None,
     honeypot_exclude: Optional[list] = None,
+    file_intel=None,
 ) -> ThreadingHTTPServer:
     class Handler(BaseHTTPRequestHandler):
         server_version = "BRUTUS-dashboard"
@@ -390,7 +419,8 @@ def create_server(
             if url.path == "/api/summary":
                 payload = summary
                 if honeypot_paths:
-                    payload = dict(summary, honeypot=build_honeypot_summary(honeypot_paths, period, exclude_nets=honeypot_exclude))
+                    payload = dict(summary, honeypot=build_honeypot_summary(honeypot_paths, period, exclude_nets=honeypot_exclude,
+                                                  file_intel=file_intel))
                 self._send(200, json.dumps(payload, ensure_ascii=False).encode("utf-8"),
                            "application/json; charset=utf-8")
             else:
@@ -401,7 +431,8 @@ def create_server(
                     self._send(500, b"Cannot read monitor status", "text/plain; charset=utf-8")
                     return
                 try:
-                    honeypot = build_honeypot_summary(honeypot_paths, period, exclude_nets=honeypot_exclude) if honeypot_paths else None
+                    honeypot = build_honeypot_summary(honeypot_paths, period, exclude_nets=honeypot_exclude,
+                                                  file_intel=file_intel) if honeypot_paths else None
                 except OSError as exc:
                     log.error("Dashboard: cannot read honeypot log: %s", exc)
                     honeypot = None

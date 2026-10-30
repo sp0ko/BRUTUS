@@ -41,3 +41,9 @@ Thumbs.db
 
 # Pobrana baza GeoIP
 data/
+
+# Dane z serwera (logi honeypota zawierają IP i hasła)
+ovh-data/
+
+# Osobne repozytorium z wpisami (threat-journal), nie jest częścią BRUTUS
+threat-journal/

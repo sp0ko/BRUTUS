@@ -28,6 +28,33 @@ class SlackAlert:
             print(f"[Slack] Send error: {exc}")
             return False
 
+    def send_file(self, sha: str, verdict: dict) -> bool:
+        try:
+            resp = requests.post(self._url, json=self._build_file_payload(sha, verdict), timeout=self._timeout)
+            resp.raise_for_status()
+            return True
+        except requests.RequestException as exc:
+            print(f"[Slack] Send error: {exc}")
+            return False
+
+    def _build_file_payload(self, sha: str, verdict: dict) -> dict:
+        T = i18n.get_T()
+        summary = T["fi_desc"].format(bad=verdict.get("malicious", 0), total=verdict.get("total", 0))
+        fields_md = f"{T['fi_f_hash']}\t<https://www.virustotal.com/gui/file/{sha}|`{sha}`>"
+        if verdict.get("label"):
+            fields_md += f"\n{T['fi_f_label']}\t{_trunc(str(verdict['label']), 100)}"
+        return {
+            "attachments": [{
+                "color": "#FF0000",
+                "blocks": [
+                    {"type": "header", "text": {"type": "plain_text", "text": T["fi_title"], "emoji": True}},
+                    {"type": "section", "text": {"type": "mrkdwn", "text": summary}},
+                    {"type": "section", "text": {"type": "mrkdwn", "text": fields_md}},
+                ],
+                "fallback": f"{T['fi_title']}: {sha}",
+            }]
+        }
+
     def _build_payload(self, event: AlertEvent, geo: Optional[dict]) -> dict:
         T      = i18n.get_T()
         ts_str = datetime.fromtimestamp(event.last_seen).strftime("%Y-%m-%d %H:%M:%S")

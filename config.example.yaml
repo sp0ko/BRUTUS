@@ -136,3 +136,14 @@ threat_intel:
     - "https://cinsscore.com/list/ci-badguys.txt"
     - "https://rules.emergingthreats.net/fwrules/emerging-Block-IPs.txt"
     - "https://feodotracker.abuse.ch/downloads/ipblocklist_recommended.txt"
+
+# Reputacja plików zebranych przez honeypota (VirusTotal).
+# Wysyłany jest tylko hash SHA256, nigdy sam plik. Klucz najlepiej podać w zmiennej
+# VT_API_KEY (np. w drop-inie systemd), a nie w tym pliku.
+file_intel:
+  enabled: false
+  api_key: ""                 # albo zmienna środowiskowa VT_API_KEY (ma pierwszeństwo)
+  cache_path: reports/file_intel.json
+  requests_per_minute: 4      # limit darmowego klucza VirusTotal
+  daily_limit: 500            # limit darmowego klucza VirusTotal
+  alert_min_detections: 5     # ile silników musi uznać plik za złośliwy, by wysłać alert Discord/Slack
