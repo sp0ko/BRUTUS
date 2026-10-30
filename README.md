@@ -27,12 +27,15 @@ Step-by-step setup (Docker, moving real SSH to another port): [docs/DEPLOY.md](d
 
 **File reputation (optional).** Files the honeypot captures are looked up on VirusTotal by SHA256 (the file itself is never sent) and the detection count appears in the dashboard, in `--report` and as a Discord/Slack alert. Enable it with `file_intel.enabled: true` and a free API key in the `VT_API_KEY` environment variable (see `config.example.yaml`). Lookups run in the background within the free quota (4/min, 500/day) and are cached; `--report` only reads that cache.
 
+📓 **Field notes:** [what the internet did to a Cowrie + BRUTU$ setup in its first 9 hours](https://sp0ko.github.io/threat-journal/posts/2026-10-30-brutus-and-cowrie-first-day) (campaigns, credentials, lessons).
+
 ---
 
-## What's new in v1.15.1
+## What's new
 
 | | |
 |---|---|
+| 🦠 **File reputation (VirusTotal)** | Optional (`file_intel`, off by default): SHA256 of files captured by the honeypot is checked on VirusTotal in the background (hash only, within the free quota, cached). Detections show in the dashboard, in `--report` and as a Discord/Slack alert |
 | 🧭 **Official MITRE ATT&CK mapping** | Each honeypot command is matched to exact technique IDs (checked against attack.mitre.org), e.g. `uname` → T1082, `whoami` → T1033, `history -c` → T1070.003, `rm -rf` → T1070.004, authorized_keys → T1098.004, `chattr` → T1222.002. New techniques panel (ranked by distinct IPs) and clickable technique chips linking to attack.mitre.org |
 | 🎯 **Campaigns & MITRE ATT&CK** | Honeypot "Top commands" and "Attacker behaviour" now count distinct IPs (one bot looping `uname` no longer drowns everything); new Campaigns panel groups the same command seen from many IPs; behaviour tags carry MITRE ATT&CK technique IDs (e.g. SSH key → T1098.004, recon → T1082); new `permission change` tag for `chattr` |
 | 🧹 **Cleaner honeypot stats** | Whitelisted IPs and this host are excluded from the honeypot section; empty passwords show as `(empty)`; echo-written files are labelled |
